@@ -50,6 +50,18 @@ def clear():
     agent.clear_history()
     return {"status": "cleared"}
 
+class ConfigRequest(BaseModel):
+    threshold: int
+
+@app.get("/config")
+def get_config():
+    return {"threshold": agent.CONFIDENCE_THRESHOLD}
+
+@app.patch("/config")
+def update_config(req: ConfigRequest):
+    agent.CONFIDENCE_THRESHOLD = max(1, min(10, req.threshold))
+    return {"threshold": agent.CONFIDENCE_THRESHOLD}
+
 @app.post("/persona")
 def set_persona(req: PersonaRequest):
     agent.set_persona(req.persona)

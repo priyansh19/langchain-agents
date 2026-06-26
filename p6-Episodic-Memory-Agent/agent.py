@@ -93,9 +93,15 @@ agent = create_react_agent(llm, tools, prompt=system_prompt)
 CONFIDENCE_THRESHOLD = 7
 conversation_history = []
 
-def chat(message: str) -> dict:
+def chat(message: str, force_model: str = None) -> dict:
+    if force_model == 'local':
+        score = 10
+    elif force_model == 'claude':
+        score = 0
+    else:
+        score = score_confidence(message)
+
     past = retrieve_memories(message)
-    score = score_confidence(message)
     conversation_history.append(HumanMessage(content=message))
 
     if score >= CONFIDENCE_THRESHOLD:
