@@ -332,10 +332,119 @@ html, body, #root {
   40%           { opacity: 1;   transform: scale(1.2); }
 }
 
+/* ── Session list ───────────────────────────────────────────────────── */
+.session-section { gap: 6px; }
+
+.session-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.btn-new-session {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 20px;
+  border: 1px solid var(--blue);
+  background: transparent;
+  color: var(--blue);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-new-session:hover    { background: rgba(88,166,255,0.12); }
+.btn-new-session:disabled { border-color: var(--border); color: var(--text-muted); cursor: not-allowed; }
+
+.session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.session-item {
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius);
+  background: transparent;
+  transition: background 0.12s;
+  overflow: hidden;
+}
+.session-item:hover           { background: var(--bg-overlay); }
+.session-item--active         { background: rgba(88,166,255,0.1); }
+
+.session-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.session-preview {
+  font-size: 12px;
+  color: var(--text-sec);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-time {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.session-delete {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin-right: 4px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+.session-item:hover .session-delete { opacity: 1; }
+.session-delete:hover               { color: var(--red); }
+
+/* ── Message meta row ───────────────────────────────────────────────── */
+.msg-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+/* ── Handled-by badge ───────────────────────────────────────────────── */
+.handled-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 20px;
+  letter-spacing: 0.3px;
+}
+.handled--claude { background: rgba(210,168,255,0.12); color: var(--purple); }
+.handled--local  { background: var(--bg-overlay); color: var(--text-muted); }
+
 /* ── Confidence badge ───────────────────────────────────────────────── */
 .confidence-badge {
   display: inline-block;
-  margin-top: 8px;
   font-size: 11px;
   font-weight: 600;
   padding: 2px 10px;

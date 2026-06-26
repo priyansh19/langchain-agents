@@ -1,10 +1,14 @@
 import { useState } from 'react';
-import type { Capabilities, ConnectionStatus } from '../types';
+import type { Capabilities, ConnectionStatus, Session } from '../types';
 
 interface Props {
   capabilities: Capabilities | null;
   status: ConnectionStatus;
-  onClear: () => void;
+  sessions: Session[];
+  activeId: string;
+  onSwitchSession: (id: string) => void;
+  onNewSession: () => void;
+  onDeleteSession: (id: string) => void;
   onSetPersona: (persona: string) => void;
 }
 
@@ -16,7 +20,21 @@ const STATUS_LABEL: Record<ConnectionStatus, string> = {
 
 const DEFAULT_PERSONA = 'You are a helpful assistant who replies in a concise and friendly manner.';
 
-export function Sidebar({ capabilities, status, onClear, onSetPersona }: Props) {
+function formatTime(iso: string): string {
+  const date = new Date(iso);
+  const now  = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+  if (isToday) return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+function sessionPreview(session: Session): string {
+  const first = session.messages.find(m => m.role === 'user');
+  if (!first) return 'New conversation';
+  return first.text.length > 32 ? first.text.slice(0, 32) + '…' : first.text;
+}
+
+export function Sidebar({ capabilities, status, sessions, activeId, onSwitchSession, onNewSession, onDeleteSession, onSetPersona }: Props) {
   const [persona, setPersona] = useState(DEFAULT_PERSONA);
   const [applied, setApplied] = useState(false);
 
@@ -34,16 +52,10 @@ export function Sidebar({ capabilities, status, onClear, onSetPersona }: Props) 
 
       <section className="sidebar-section">
         <p className="section-title">Active Agent</p>
-        <p className="agent-name">
-          {capabilities?.agent_name ?? 'Connecting…'}
-        </p>
+        <p className="agent-name">{capabilities?.agent_name ?? 'Connecting…'}</p>
         <div className="tag-row">
-          {capabilities?.version && (
-            <span className="tag tag--blue">v{capabilities.version}</span>
-          )}
-          {capabilities?.model && (
-            <span className="tag tag--purple">{capabilities.model}</span>
-          )}
+          {capabilities?.version && <span className="tag tag--blue">v{capabilities.version}</span>}
+          {capabilities?.model   && <span className="tag tag--purple">{capabilities.model}</span>}
         </div>
       </section>
 
@@ -84,10 +96,37 @@ export function Sidebar({ capabilities, status, onClear, onSetPersona }: Props) 
         </section>
       )}
 
+      <section className="sidebar-section session-section">
+        <div className="session-header-row">
+          <p className="section-title" style={{ marginBottom: 0 }}>Sessions</p>
+          <button className="btn-new-session" onClick={onNewSession} disabled={status !== 'online'}>
+            + New
+          </button>
+        </div>
+        <div className="session-list">
+          {sessions.length === 0 && <span className="muted">No sessions yet</span>}
+          {[...sessions].reverse().map(session => (
+            <div
+              key={session.id}
+              className={`session-item ${session.id === activeId ? 'session-item--active' : ''}`}
+            >
+              <button className="session-body" onClick={() => onSwitchSession(session.id)}>
+                <span className="session-preview">{sessionPreview(session)}</span>
+                <span className="session-time">{formatTime(session.createdAt)}</span>
+              </button>
+              <button
+                className="session-delete"
+                onClick={e => { e.stopPropagation(); onDeleteSession(session.id); }}
+                title="Delete session"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <div className="sidebar-footer">
-        <button className="btn-new-chat" onClick={onClear}>
-          ↺ New Conversation
-        </button>
         <div className="status-row">
           <div className={`dot dot--${status}`} />
           <span className="muted">{STATUS_LABEL[status]}</span>

@@ -26,6 +26,7 @@ export interface ChatMessage {
   tool_steps?: ToolStep[];
   sources?: Source[];
   confidence?: number;
+  handled_by?: string;
   loading?: boolean;
 }
 
@@ -34,4 +35,12 @@ export interface ChatResponse {
   tool_steps?: ToolStep[];
   sources?: Source[];
   confidence?: number;
+  handled_by?: string;
+}
+
+export interface Session {
+  id: string;
+  createdAt: string;
+  messages: ChatMessage[];
+  agentName?: string;
 }

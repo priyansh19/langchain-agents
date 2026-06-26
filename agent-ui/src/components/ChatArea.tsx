@@ -6,9 +6,10 @@ interface Props {
   messages: ChatMessage[];
   onSend: (text: string) => void;
   disabled: boolean;
+  isArchived?: boolean;
 }
 
-export function ChatArea({ messages, onSend, disabled }: Props) {
+export function ChatArea({ messages, onSend, disabled, isArchived }: Props) {
   const [draft, setDraft] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef    = useRef<HTMLTextAreaElement>(null);
@@ -42,7 +43,9 @@ export function ChatArea({ messages, onSend, disabled }: Props) {
   return (
     <div className="chat-wrap">
       <div className="chat-header">
-        💬 Chat with your agent
+        {isArchived
+          ? '📁 Archived session — view only'
+          : '💬 Chat with your agent'}
       </div>
 
       <div className="messages">

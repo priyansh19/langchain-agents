@@ -8,7 +8,7 @@ interface Props {
 }
 
 export function MessageBubble({ message }: Props) {
-  const { role, text, tool_steps, sources, confidence, loading } = message;
+  const { role, text, tool_steps, sources, confidence, handled_by, loading } = message;
   const isUser = role === 'user';
 
   return (
@@ -30,11 +30,23 @@ export function MessageBubble({ message }: Props) {
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
           </div>
         )}
-        {!loading && !isUser && confidence !== undefined && (
-          <ConfidenceBadge score={confidence} />
+        {!loading && !isUser && (confidence !== undefined || handled_by) && (
+          <div className="msg-meta-row">
+            {confidence !== undefined && <ConfidenceBadge score={confidence} />}
+            {handled_by && <HandledByBadge by={handled_by} />}
+          </div>
         )}
       </div>
     </div>
+  );
+}
+
+function HandledByBadge({ by }: { by: string }) {
+  const isClaude = by.toLowerCase() === 'claude';
+  return (
+    <span className={`handled-badge ${isClaude ? 'handled--claude' : 'handled--local'}`}>
+      {isClaude ? 'via Claude' : 'via Local'}
+    </span>
   );
 }
 
