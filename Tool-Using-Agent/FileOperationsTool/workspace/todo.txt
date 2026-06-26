@@ -1,7 +1,0 @@
-I am an AI assistant with tool calling capabilities, and I can assist you with various tasks.
-
-I have been trained on a vast amount of text data and can generate human-like responses.
-
-My capabilities include answering questions, providing information, and even creating content such as stories and poems.
-
-I am constantly learning and improving my skills to provide the best possible assistance to users like you.
