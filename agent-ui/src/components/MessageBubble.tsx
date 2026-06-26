@@ -4,8 +4,9 @@ import remarkGfm from 'remark-gfm';
 import type { ChatMessage, ToolStep, Source } from '../types';
 
 interface Props {
-  message: ChatMessage;
-  onEdit?: (newText: string) => void;
+  message:   ChatMessage;
+  showCost?: boolean;
+  onEdit?:   (newText: string) => void;
   onBookmark?: () => void;
 }
 
@@ -13,9 +14,12 @@ function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-export function MessageBubble({ message, onEdit, onBookmark }: Props) {
+export function MessageBubble({ message, showCost, onEdit, onBookmark }: Props) {
   const { role, text, tool_steps, sources, confidence, handled_by, memory_used, timestamp, loading, bookmarked } = message;
   const isUser = role === 'user';
+  const routingClass = !isUser && handled_by
+    ? (handled_by === 'local llm' ? 'msg-group--local' : 'msg-group--cloud')
+    : '';
   const [copied,  setCopied]  = useState(false);
   const [editing, setEditing] = useState(false);
   const [editVal, setEditVal] = useState(text);
@@ -46,11 +50,14 @@ export function MessageBubble({ message, onEdit, onBookmark }: Props) {
   }
 
   return (
-    <div className={`msg-group msg-group--${role}`}>
+    <div className={`msg-group msg-group--${role} ${routingClass}`}>
       <div className="msg-label-row">
         <span className="msg-label">{isUser ? 'You' : 'Assistant'}</span>
         {timestamp && <span className="msg-time">{formatTime(timestamp)}</span>}
         {bookmarked && <span className="bookmark-indicator" title="Bookmarked">🔖</span>}
+        {!isUser && handled_by === 'local llm' && !loading && (
+          <span className="privacy-badge" title="This response never left your machine">🔒 Private</span>
+        )}
       </div>
 
       <div className={`msg-bubble msg-bubble--${role}`}>
@@ -82,11 +89,14 @@ export function MessageBubble({ message, onEdit, onBookmark }: Props) {
           </div>
         )}
 
-        {!loading && !isUser && (confidence !== undefined || handled_by || memory_used) && (
+        {!loading && !isUser && (confidence !== undefined || handled_by || memory_used || showCost) && (
           <div className="msg-meta-row">
             {confidence !== undefined && <ConfidenceBadge score={confidence} />}
             {handled_by && <HandledByBadge by={handled_by} />}
             {memory_used && <span className="memory-badge">🧠 from memory</span>}
+            {showCost && handled_by && (
+              <span className="cost-badge">{handled_by === 'local llm' ? '$0.00' : '~$0.003'}</span>
+            )}
           </div>
         )}
 

@@ -976,3 +976,171 @@ html, body, #root {
   color: var(--text-muted);
   text-align: center;
 }
+
+/* ── Tab bar ────────────────────────────────────────────────────────── */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+.app-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+.tab-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 16px;
+  height: 44px;
+  min-height: 44px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.tab-bar-logo {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-prim);
+  margin-right: 12px;
+  letter-spacing: 0.02em;
+}
+.tab-list {
+  display: flex;
+  gap: 2px;
+}
+.tab-btn {
+  padding: 5px 18px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-muted);
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+.tab-btn:hover { color: var(--text-sec); background: var(--bg-overlay); }
+.tab-btn--active.tab-btn--chat   { color: var(--blue);   background: rgba(88,166,255,0.1);  border-color: rgba(88,166,255,0.25); }
+.tab-btn--active.tab-btn--cowork { color: var(--yellow);  background: rgba(227,179,65,0.1);  border-color: rgba(227,179,65,0.25); }
+.tab-btn--active.tab-btn--code   { color: var(--green);  background: rgba(63,185,80,0.1);   border-color: rgba(63,185,80,0.25); }
+
+/* ── Mode placeholder ───────────────────────────────────────────────── */
+.mode-placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-base);
+}
+.mode-placeholder-inner {
+  text-align: center;
+  max-width: 420px;
+  padding: 40px;
+}
+.mode-placeholder-icon  { font-size: 48px; display: block; margin-bottom: 16px; }
+.mode-placeholder-title { font-size: 22px; font-weight: 700; color: var(--text-prim); margin-bottom: 10px; }
+.mode-placeholder-desc  { font-size: 14px; color: var(--text-muted); line-height: 1.6; margin-bottom: 16px; }
+.mode-placeholder-tag   { font-size: 12px; color: var(--text-muted); opacity: 0.5; }
+
+/* ── Routing left border on messages ────────────────────────────────── */
+.msg-group--local { border-left: 3px solid rgba(63,185,80,0.5);  padding-left: 5px; }
+.msg-group--cloud { border-left: 3px solid rgba(210,168,255,0.5); padding-left: 5px; }
+
+/* ── Privacy badge ──────────────────────────────────────────────────── */
+.privacy-badge {
+  font-size: 10px;
+  color: var(--green);
+  background: rgba(63,185,80,0.1);
+  border-radius: 20px;
+  padding: 1px 7px;
+  margin-left: 6px;
+}
+
+/* ── Savings counter ────────────────────────────────────────────────── */
+.savings-counter {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.savings-local { color: var(--green); }
+.savings-cloud { color: var(--purple); }
+
+/* ── Search row ─────────────────────────────────────────────────────── */
+.search-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.search-row .session-search { flex: 1; }
+.btn-search-toggle {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.btn-search-toggle--active { color: var(--blue); border-color: var(--blue); background: rgba(88,166,255,0.1); }
+
+/* ── Routing timeline ───────────────────────────────────────────────── */
+.routing-timeline {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 24px 2px;
+  flex-wrap: wrap;
+}
+.routing-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  cursor: default;
+  flex-shrink: 0;
+}
+.routing-dot--local { background: var(--green); }
+.routing-dot--cloud { background: var(--purple); }
+.routing-timeline-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.5;
+  margin-left: 6px;
+}
+
+/* ── Cost toggle + badge ────────────────────────────────────────────── */
+.chat-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.chat-header { display: flex; align-items: center; justify-content: space-between; }
+.btn-cost-toggle {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.btn-cost-toggle--active { color: var(--yellow); border-color: var(--yellow); background: rgba(227,179,65,0.1); }
+.cost-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 20px;
+  background: rgba(227,179,65,0.1);
+  color: var(--yellow);
+}

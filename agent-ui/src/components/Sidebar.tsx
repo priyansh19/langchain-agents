@@ -44,12 +44,16 @@ export function Sidebar({
   onSwitchSession, onNewSession, onDeleteSession, onRenameSession,
   onExportSession, onPinSession, onImportSession, onSetPersona,
 }: Props) {
-  const [persona,   setPersona]   = useState(DEFAULT_PERSONA);
-  const [applied,   setApplied]   = useState(false);
-  const [search,    setSearch]    = useState('');
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName,  setEditName]  = useState('');
+  const [persona,          setPersona]          = useState(DEFAULT_PERSONA);
+  const [applied,          setApplied]          = useState(false);
+  const [search,           setSearch]           = useState('');
+  const [searchInMessages, setSearchInMessages] = useState(false);
+  const [editingId,        setEditingId]        = useState<string | null>(null);
+  const [editName,         setEditName]         = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const localCount = sessions.reduce((n, s) => n + s.messages.filter(m => m.handled_by === 'local llm').length, 0);
+  const cloudCount = sessions.reduce((n, s) => n + s.messages.filter(m => m.handled_by === 'claude').length, 0);
 
   function handleApply() {
     onSetPersona(persona);
@@ -79,9 +83,12 @@ export function Sidebar({
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
 
+  const q = search.toLowerCase();
   const filtered = sorted.filter(s => {
     if (!search) return true;
-    return getPreview(s).toLowerCase().includes(search.toLowerCase());
+    if (getPreview(s).toLowerCase().includes(q)) return true;
+    if (searchInMessages) return s.messages.some(m => m.text.toLowerCase().includes(q));
+    return false;
   });
 
   return (
@@ -97,6 +104,12 @@ export function Sidebar({
           {capabilities?.version && <span className="tag tag--blue">v{capabilities.version}</span>}
           {capabilities?.model   && <span className="tag tag--purple">{capabilities.model}</span>}
         </div>
+        {(localCount + cloudCount) > 0 && (
+          <div className="savings-counter">
+            <span className="savings-local">⬢ {localCount} local</span>
+            <span className="savings-cloud">◈ {cloudCount} cloud</span>
+          </div>
+        )}
       </section>
 
       <section className="sidebar-section">
@@ -153,12 +166,21 @@ export function Sidebar({
           onChange={handleImportFile}
         />
 
-        <input
-          className="session-search"
-          placeholder="Search sessions…"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
+        <div className="search-row">
+          <input
+            className="session-search"
+            placeholder="Search sessions…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          <button
+            className={`btn-search-toggle ${searchInMessages ? 'btn-search-toggle--active' : ''}`}
+            onClick={() => setSearchInMessages(v => !v)}
+            title={searchInMessages ? 'Searching message content' : 'Search titles only'}
+          >
+            ☰
+          </button>
+        </div>
 
         <div className="session-list">
           {filtered.length === 0 && <span className="muted">No sessions found</span>}

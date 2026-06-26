@@ -4,6 +4,7 @@ import { fetchCapabilities, sendChat, clearConversation, setPersona } from './ap
 import { Sidebar } from './components/Sidebar';
 import { ChatArea } from './components/ChatArea';
 import { CommandPalette, type Command } from './components/CommandPalette';
+import { TabBar, type AppMode } from './components/TabBar';
 
 let msgCounter = 0;
 const uid          = () => `msg-${++msgCounter}`;
@@ -71,6 +72,7 @@ function App() {
   const [isGenerating,  setIsGenerating]  = useState(false);
   const [showUndo,      setShowUndo]      = useState(false);
   const [showPalette,   setShowPalette]   = useState(false);
+  const [mode,          setMode]          = useState<AppMode>('chat');
 
   const retryRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef   = useRef<AbortController | null>(null);
@@ -122,6 +124,9 @@ function App() {
     function onKeyDown(e: KeyboardEvent) {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); setShowPalette(p => !p); }
       if (e.altKey && e.key === 'n') { e.preventDefault(); if (status === 'online') handleNewSession(); }
+      if ((e.ctrlKey || e.metaKey) && e.key === '1') { e.preventDefault(); setMode('chat'); }
+      if ((e.ctrlKey || e.metaKey) && e.key === '2') { e.preventDefault(); setMode('cowork'); }
+      if ((e.ctrlKey || e.metaKey) && e.key === '3') { e.preventDefault(); setMode('code'); }
     }
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
@@ -317,42 +322,67 @@ function App() {
 
   return (
     <div className="app">
-      <Sidebar
-        capabilities={capabilities}
-        status={status}
-        sessions={sessions}
-        activeId={activeId}
-        onSwitchSession={setActiveId}
-        onNewSession={handleNewSession}
-        onDeleteSession={handleDeleteSession}
-        onRenameSession={handleRenameSession}
-        onExportSession={handleExportSession}
-        onPinSession={handlePinSession}
-        onImportSession={handleImportSession}
-        onSetPersona={handleSetPersona}
-      />
-      <ChatArea
-        messages={activeMessages}
-        onSend={handleSend}
-        onStop={handleStop}
-        onRetry={handleRetry}
-        onUndo={handleUndo}
-        onEditMessage={handleEditMessage}
-        onBookmarkMessage={handleBookmarkMessage}
-        disabled={!canSend}
-        isGenerating={isGenerating}
-        isArchived={!canSend && status === 'online'}
-        showRetry={canSend && lastMsgFailed && !isGenerating}
-        showUndo={showUndo}
-        draft={currentDraft}
-        onDraftChange={setDraft}
-      />
+      <TabBar mode={mode} onChange={setMode} />
+      <div className="app-body">
+        <Sidebar
+          capabilities={capabilities}
+          status={status}
+          sessions={sessions}
+          activeId={activeId}
+          onSwitchSession={setActiveId}
+          onNewSession={handleNewSession}
+          onDeleteSession={handleDeleteSession}
+          onRenameSession={handleRenameSession}
+          onExportSession={handleExportSession}
+          onPinSession={handlePinSession}
+          onImportSession={handleImportSession}
+          onSetPersona={handleSetPersona}
+        />
+        {mode === 'chat' ? (
+          <ChatArea
+            messages={activeMessages}
+            onSend={handleSend}
+            onStop={handleStop}
+            onRetry={handleRetry}
+            onUndo={handleUndo}
+            onEditMessage={handleEditMessage}
+            onBookmarkMessage={handleBookmarkMessage}
+            disabled={!canSend}
+            isGenerating={isGenerating}
+            isArchived={!canSend && status === 'online'}
+            showRetry={canSend && lastMsgFailed && !isGenerating}
+            showUndo={showUndo}
+            draft={currentDraft}
+            onDraftChange={setDraft}
+          />
+        ) : (
+          <ModePlaceholder mode={mode} />
+        )}
+      </div>
       {showPalette && (
         <CommandPalette
           commands={paletteCommands}
           onClose={() => setShowPalette(false)}
         />
       )}
+    </div>
+  );
+}
+
+function ModePlaceholder({ mode }: { mode: AppMode }) {
+  const info = {
+    chat:   { icon: '💬', title: 'Chat Mode',   desc: '' },
+    cowork: { icon: '🤝', title: 'Cowork Mode', desc: 'Agentic task management with approval gates, dual-zone layout, and document production. Coming in Phase 10.' },
+    code:   { icon: '💻', title: 'Code Mode',   desc: 'Software development workspace with diff pane, terminal, file editor, and live preview. Coming in Phase 11.' },
+  }[mode];
+  return (
+    <div className="mode-placeholder">
+      <div className="mode-placeholder-inner">
+        <span className="mode-placeholder-icon">{info.icon}</span>
+        <h2 className="mode-placeholder-title">{info.title}</h2>
+        <p className="mode-placeholder-desc">{info.desc}</p>
+        <p className="mode-placeholder-tag">Use Ctrl+1 to return to Chat</p>
+      </div>
     </div>
   );
 }

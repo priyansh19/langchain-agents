@@ -28,8 +28,9 @@ export function ChatArea({
   const messagesEndRef  = useRef<HTMLDivElement>(null);
   const containerRef    = useRef<HTMLDivElement>(null);
   const textareaRef     = useRef<HTMLTextAreaElement>(null);
-  const [showJump, setShowJump] = useState(false);
+  const [showJump,         setShowJump]         = useState(false);
   const [showBookmarksOnly, setShowBookmarksOnly] = useState(false);
+  const [showCost,          setShowCost]          = useState(false);
 
   useEffect(() => {
     if (!showJump) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -67,22 +68,32 @@ export function ChatArea({
 
   const charsLeft = MAX_CHARS - draft.length;
   const nearLimit = charsLeft < 200;
-  const bookmarkCount = messages.filter(m => m.bookmarked).length;
+  const bookmarkCount  = messages.filter(m => m.bookmarked).length;
   const displayMessages = showBookmarksOnly ? messages.filter(m => m.bookmarked) : messages;
+  const routingDots    = messages.filter(m => m.role === 'assistant' && m.handled_by && !m.loading);
 
   return (
     <div className="chat-wrap">
       <div className="chat-header">
         <span>{isArchived ? '📁 Archived session — view only' : '💬 Chat'}</span>
-        {bookmarkCount > 0 && (
+        <div className="chat-header-actions">
+          {bookmarkCount > 0 && (
+            <button
+              className={`btn-bookmarks-toggle ${showBookmarksOnly ? 'btn-bookmarks-toggle--active' : ''}`}
+              onClick={() => setShowBookmarksOnly(v => !v)}
+              title={showBookmarksOnly ? 'Show all messages' : 'Show bookmarked only'}
+            >
+              🔖 {bookmarkCount}
+            </button>
+          )}
           <button
-            className={`btn-bookmarks-toggle ${showBookmarksOnly ? 'btn-bookmarks-toggle--active' : ''}`}
-            onClick={() => setShowBookmarksOnly(v => !v)}
-            title={showBookmarksOnly ? 'Show all messages' : 'Show bookmarked only'}
+            className={`btn-cost-toggle ${showCost ? 'btn-cost-toggle--active' : ''}`}
+            onClick={() => setShowCost(v => !v)}
+            title={showCost ? 'Hide costs' : 'Show cost per message'}
           >
-            🔖 {bookmarkCount}
+            $ {showCost ? 'on' : 'off'}
           </button>
-        )}
+        </div>
       </div>
 
       <div className="messages" ref={containerRef} onScroll={handleScroll}>
@@ -93,10 +104,23 @@ export function ChatArea({
           <MessageBubble
             key={msg.id}
             message={msg}
+            showCost={showCost}
             onEdit={msg.role === 'user' ? newText => onEditMessage(msg.id, newText) : undefined}
             onBookmark={() => onBookmarkMessage(msg.id)}
           />
         ))}
+        {routingDots.length > 0 && (
+          <div className="routing-timeline">
+            {routingDots.map(m => (
+              <span
+                key={m.id}
+                className={`routing-dot routing-dot--${m.handled_by === 'local llm' ? 'local' : 'cloud'}`}
+                title={`${m.handled_by === 'local llm' ? 'Local' : 'Claude'}${m.confidence !== undefined ? ` · Score ${m.confidence}/10` : ''}`}
+              />
+            ))}
+            <span className="routing-timeline-label">routing history</span>
+          </div>
+        )}
         <div ref={messagesEndRef} />
       </div>
 
