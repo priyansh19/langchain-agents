@@ -15,13 +15,13 @@ app.add_middleware(
 @app.get("/capabilities")
 def capabilities():
     return {
-        "agent_name": "Persona Chatbot",
-        "version": "2.0",
+        "agent_name": "File Operations Agent",
+        "version": "3.0",
         "model": "llama3.2",
         "features": {
             "memory": True,
             "persona": True,
-            "tools": False,
+            "tools": True,
             "rag": False
         }
     }
@@ -31,8 +31,8 @@ class ChatRequest(BaseModel):
 
 @app.post("/chat")
 def chat(req: ChatRequest):
-    response = agent.chat(req.message)
-    return {"response": response}
+    result = agent.chat(req.message)
+    return {"response": result["response"], "tool_steps": result["tool_steps"]}
 
 class PersonaRequest(BaseModel):
     persona: str
