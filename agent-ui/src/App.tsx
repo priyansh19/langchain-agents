@@ -53,6 +53,7 @@ function App() {
               text:       data.response,
               tool_steps: data.tool_steps,
               sources:    data.sources,
+              confidence: data.confidence,
             }
           : m
       ));

@@ -25,6 +25,7 @@ export interface ChatMessage {
   text: string;
   tool_steps?: ToolStep[];
   sources?: Source[];
+  confidence?: number;
   loading?: boolean;
 }
 
@@ -32,4 +33,5 @@ export interface ChatResponse {
   response: string;
   tool_steps?: ToolStep[];
   sources?: Source[];
+  confidence?: number;
 }

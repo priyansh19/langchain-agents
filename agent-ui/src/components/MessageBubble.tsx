@@ -8,7 +8,7 @@ interface Props {
 }
 
 export function MessageBubble({ message }: Props) {
-  const { role, text, tool_steps, sources, loading } = message;
+  const { role, text, tool_steps, sources, confidence, loading } = message;
   const isUser = role === 'user';
 
   return (
@@ -30,7 +30,19 @@ export function MessageBubble({ message }: Props) {
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
           </div>
         )}
+        {!loading && !isUser && confidence !== undefined && (
+          <ConfidenceBadge score={confidence} />
+        )}
       </div>
+    </div>
+  );
+}
+
+function ConfidenceBadge({ score }: { score: number }) {
+  const color = score >= 8 ? 'confidence--high' : score >= 5 ? 'confidence--mid' : 'confidence--low';
+  return (
+    <div className={`confidence-badge ${color}`}>
+      Confidence {score}/10
     </div>
   );
 }
