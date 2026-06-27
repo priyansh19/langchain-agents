@@ -28,6 +28,7 @@ export interface ChatMessage {
   confidence?: number;
   handled_by?: string;
   memory_used?: boolean;
+  facts_learned?: number;
   timestamp?: string;
   bookmarked?: boolean;
   loading?: boolean;
@@ -40,6 +41,7 @@ export interface ChatResponse {
   confidence?: number;
   handled_by?: string;
   memory_used?: boolean;
+  facts_learned?: number;
 }
 
 export interface Session {
@@ -47,7 +49,16 @@ export interface Session {
   name?: string;
   pinned?: boolean;
   archived?: boolean;
+  projectId?: string;
   createdAt: string;
   messages: ChatMessage[];
   agentName?: string;
+}
+
+export interface Project {
+  id:        string;
+  name:      string;
+  color:     string;
+  createdAt: string;
+  collapsed?: boolean;
 }

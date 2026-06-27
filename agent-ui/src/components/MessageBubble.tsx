@@ -1,6 +1,7 @@
 import { useState, useRef, KeyboardEvent } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { Bookmark, BookmarkCheck, Pencil, Copy, Check, Lock, Wrench, BookOpen, ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
 import type { ChatMessage, ToolStep, Source } from '../types';
 
 interface Props {
@@ -16,7 +17,7 @@ function formatTime(iso: string): string {
 }
 
 export function MessageBubble({ message, showCost, onEdit, onBookmark, onOpenArtifact }: Props) {
-  const { role, text, tool_steps, sources, confidence, handled_by, memory_used, timestamp, loading, bookmarked } = message;
+  const { role, text, tool_steps, sources, confidence, handled_by, memory_used, facts_learned, timestamp, loading, bookmarked } = message;
   const isUser = role === 'user';
   const routingClass = !isUser && handled_by
     ? (handled_by === 'local llm' ? 'msg-group--local' : 'msg-group--cloud')
@@ -53,11 +54,11 @@ export function MessageBubble({ message, showCost, onEdit, onBookmark, onOpenArt
   return (
     <div className={`msg-group msg-group--${role} ${routingClass}`}>
       <div className="msg-label-row">
-        <span className="msg-label">{isUser ? 'You' : 'Assistant'}</span>
+        <span className="msg-label">{isUser ? 'YOU' : 'MACH1'}</span>
         {timestamp && <span className="msg-time">{formatTime(timestamp)}</span>}
-        {bookmarked && <span className="bookmark-indicator" title="Bookmarked">🔖</span>}
+        {bookmarked && <span className="bookmark-indicator" title="Bookmarked"><BookmarkCheck size={11}/></span>}
         {!isUser && handled_by === 'local llm' && !loading && (
-          <span className="privacy-badge" title="This response never left your machine">🔒 Private</span>
+          <span className="privacy-badge" title="This response never left your machine"><Lock size={9}/> Private</span>
         )}
       </div>
 
@@ -122,7 +123,10 @@ export function MessageBubble({ message, showCost, onEdit, onBookmark, onOpenArt
           <div className="msg-meta-row">
             {confidence !== undefined && <ConfidenceBadge score={confidence} />}
             {handled_by && <HandledByBadge by={handled_by} confidence={confidence} />}
-            {memory_used && <span className="memory-badge">🧠 from memory</span>}
+            {memory_used && <span className="memory-badge"><BookOpen size={10}/> from memory</span>}
+            {facts_learned !== undefined && facts_learned > 0 && (
+              <span className="facts-badge"><Sparkles size={10}/> {facts_learned} fact{facts_learned > 1 ? 's' : ''} learned</span>
+            )}
             {showCost && handled_by && (
               <span className="cost-badge">{handled_by === 'local llm' ? '$0.00' : '~$0.003'}</span>
             )}
@@ -137,11 +141,11 @@ export function MessageBubble({ message, showCost, onEdit, onBookmark, onOpenArt
                 onClick={onBookmark}
                 title={bookmarked ? 'Remove bookmark' : 'Bookmark'}
               >
-                🔖
+                <Bookmark size={11}/>
               </button>
             )}
             {isUser && onEdit && !editing && (
-              <button className="btn-msg-action" onClick={startEdit} title="Edit message">✎</button>
+              <button className="btn-msg-action" onClick={startEdit} title="Edit message"><Pencil size={11}/></button>
             )}
             {!isUser && (
               <button
@@ -149,7 +153,7 @@ export function MessageBubble({ message, showCost, onEdit, onBookmark, onOpenArt
                 onClick={copyText}
                 title="Copy response"
               >
-                {copied ? '✓' : '⎘'}
+                {copied ? <Check size={11}/> : <Copy size={11}/>}
               </button>
             )}
           </div>
@@ -206,12 +210,12 @@ function ToolStepsCard({ steps }: { steps: ToolStep[] }) {
   return (
     <div className="tool-card">
       <button className="tool-card-header" onClick={() => setOpen(o => !o)}>
-        <span>🔧 Used {steps.length} tool{steps.length > 1 ? 's' : ''}</span>
-        <span className="tool-toggle">{open ? '▾ collapse' : '▸ expand'}</span>
+        <Wrench size={11}/><span>Used {steps.length} tool{steps.length > 1 ? 's' : ''}</span>
+        <span className="tool-toggle">{open ? <ChevronDown size={11}/> : <ChevronRight size={11}/>}</span>
       </button>
       {open && steps.map((s, i) => (
         <div key={i} className="tool-step">
-          <p className="tool-step-name">🔧 {s.tool}</p>
+          <p className="tool-step-name"><Wrench size={10}/> {s.tool}</p>
           <div className="tool-step-row"><span className="ts-key">Input</span><span className="ts-val">{s.input}</span></div>
           <div className="tool-step-row"><span className="ts-key">Output</span><span className="ts-val">{s.output}</span></div>
         </div>
@@ -223,7 +227,7 @@ function ToolStepsCard({ steps }: { steps: ToolStep[] }) {
 function SourcesCard({ sources }: { sources: Source[] }) {
   return (
     <div className="sources-card">
-      <div className="sources-header">📚 {sources.length} source{sources.length > 1 ? 's' : ''}</div>
+      <div className="sources-header"><BookOpen size={11}/> {sources.length} source{sources.length > 1 ? 's' : ''}</div>
       {sources.map((s, i) => (
         <div key={i} className="source-item">
           <p className="source-title">{s.title}{s.page ? ` — p.${s.page}` : ''}</p>

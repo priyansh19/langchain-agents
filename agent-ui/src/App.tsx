@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { Capabilities, ChatMessage, ConnectionStatus, Session } from './types';
+import type { Capabilities, ChatMessage, ConnectionStatus, Session, Project } from './types';
 import { fetchCapabilities, sendChat, clearConversation, setPersona } from './api';
 import { Sidebar } from './components/Sidebar';
 import { ChatArea } from './components/ChatArea';
@@ -8,6 +8,7 @@ import { TabBar, type AppMode } from './components/TabBar';
 import { ShortcutCheatsheet } from './components/ShortcutCheatsheet';
 import { CoworkArea } from './components/CoworkArea';
 import { CodeArea } from './components/CodeArea';
+import { SettingsPanel } from './components/SettingsPanel';
 
 let msgCounter = 0;
 const uid          = () => `msg-${++msgCounter}`;
@@ -15,6 +16,7 @@ const newSessionId = () => `session-${Date.now()}`;
 const now          = () => new Date().toISOString();
 const STORAGE_KEY  = 'agent-lab-sessions';
 const DRAFT_KEY    = 'agent-lab-drafts';
+const PROJECT_KEY  = 'agent-lab-projects';
 
 function loadSessions(): Session[] {
   try { const raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) : []; } catch { return []; }
@@ -27,6 +29,12 @@ function loadDrafts(): Record<string, string> {
 }
 function saveDrafts(drafts: Record<string, string>) {
   try { localStorage.setItem(DRAFT_KEY, JSON.stringify(drafts)); } catch {}
+}
+function loadProjects(): Project[] {
+  try { const raw = localStorage.getItem(PROJECT_KEY); return raw ? JSON.parse(raw) : []; } catch { return []; }
+}
+function saveProjects(projects: Project[]) {
+  try { localStorage.setItem(PROJECT_KEY, JSON.stringify(projects)); } catch {}
 }
 
 function sessionPreview(session: Session): string {
@@ -67,6 +75,7 @@ function App() {
   const [capabilities,  setCapabilities]  = useState<Capabilities | null>(null);
   const [status,        setStatus]        = useState<ConnectionStatus>('connecting');
   const [sessions,      setSessions]      = useState<Session[]>(() => loadSessions());
+  const [projects,      setProjects]      = useState<Project[]>(() => loadProjects());
   const [activeId,      setActiveId]      = useState<string>(() => {
     const saved = loadSessions();
     return saved.length > 0 ? saved[saved.length - 1].id : '';
@@ -75,6 +84,7 @@ function App() {
   const [isGenerating,  setIsGenerating]  = useState(false);
   const [showUndo,      setShowUndo]      = useState(false);
   const [showPalette,   setShowPalette]   = useState(false);
+  const [showSettings,  setShowSettings]  = useState(false);
   const [mode,          setMode]          = useState<AppMode>('chat');
   const [showCheatsheet, setShowCheatsheet] = useState(false);
 
@@ -84,12 +94,16 @@ function App() {
 
   const activeSession  = sessions.find(s => s.id === activeId);
   const activeMessages = activeSession?.messages ?? [];
-  const latestId       = sessions[sessions.length - 1]?.id;
-  const canSend        = status === 'online' && activeId === latestId;
+  // Newest live (non-archived) session — determines who can receive new messages
+  const latestLiveId   = sessions
+    .filter(s => !s.archived)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]?.id ?? '';
+  const canSend        = status === 'online' && activeId === latestLiveId;
   const currentDraft   = drafts[activeId] ?? '';
 
   useEffect(() => { saveSessions(sessions); }, [sessions]);
   useEffect(() => { saveDrafts(drafts); }, [drafts]);
+  useEffect(() => { saveProjects(projects); }, [projects]);
 
   function setDraft(text: string) {
     setDrafts(prev => ({ ...prev, [activeId]: text }));
@@ -179,8 +193,9 @@ function App() {
           sources:     data.sources,
           confidence:  data.confidence,
           handled_by:  data.handled_by,
-          memory_used: data.memory_used,
-          timestamp:   now(),
+          memory_used:    data.memory_used,
+          facts_learned:  data.facts_learned,
+          timestamp:      now(),
         } : m
       ));
     } catch (err) {
@@ -240,13 +255,16 @@ function App() {
 
   const handleNewSession = useCallback(async () => {
     await clearConversation();
-    const id = newSessionId();
+    const id  = newSessionId();
+    const ts  = now();
     const session: Session = {
-      id, createdAt: now(), agentName: capabilities?.agent_name,
-      messages: [{ id: uid(), role: 'assistant', text: 'New conversation started. Ask me anything!', timestamp: now() }],
+      id,
+      createdAt: ts,
+      agentName: capabilities?.agent_name,
+      messages: [],          // truly empty — no welcome noise, no old history
     };
+    setActiveId(id);         // switch BEFORE adding so the render sees it immediately
     setSessions(prev => [...prev, session]);
-    setActiveId(id);
   }, [capabilities]);
 
   const handleDeleteSession = useCallback((id: string) => {
@@ -321,6 +339,28 @@ function App() {
     reader.readAsText(file);
   }, [capabilities]);
 
+  const handleCreateProject = useCallback((name: string, color: string) => {
+    const id = `proj-${Date.now()}`;
+    setProjects(prev => [...prev, { id, name, color, createdAt: now() }]);
+  }, []);
+
+  const handleDeleteProject = useCallback((id: string) => {
+    setProjects(prev => prev.filter(p => p.id !== id));
+    setSessions(prev => prev.map(s => s.projectId === id ? { ...s, projectId: undefined } : s));
+  }, []);
+
+  const handleRenameProject = useCallback((id: string, name: string) => {
+    setProjects(prev => prev.map(p => p.id === id ? { ...p, name } : p));
+  }, []);
+
+  const handleToggleProjectCollapse = useCallback((id: string) => {
+    setProjects(prev => prev.map(p => p.id === id ? { ...p, collapsed: !p.collapsed } : p));
+  }, []);
+
+  const handleMoveToProject = useCallback((sessionId: string, projectId: string | undefined) => {
+    setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, projectId } : s));
+  }, []);
+
   const handleSetPersona = useCallback(async (persona: string) => {
     await setPersona(persona);
     await clearConversation();
@@ -342,12 +382,11 @@ function App() {
 
   return (
     <div className="app">
-      <TabBar mode={mode} onChange={setMode} />
+      <TabBar mode={mode} status={status} onChange={setMode} />
       <div className="app-body">
         <Sidebar
-          capabilities={capabilities}
-          status={status}
           sessions={sessions}
+          projects={projects}
           activeId={activeId}
           onSwitchSession={setActiveId}
           onNewSession={handleNewSession}
@@ -356,9 +395,14 @@ function App() {
           onExportSession={handleExportSession}
           onPinSession={handlePinSession}
           onImportSession={handleImportSession}
-          onSetPersona={handleSetPersona}
           onRestoreSession={handleRestoreSession}
           onPermanentDelete={handlePermanentDelete}
+          onCreateProject={handleCreateProject}
+          onDeleteProject={handleDeleteProject}
+          onRenameProject={handleRenameProject}
+          onToggleProjectCollapse={handleToggleProjectCollapse}
+          onMoveToProject={handleMoveToProject}
+          onOpenSettings={() => setShowSettings(true)}
         />
         {mode === 'chat' ? (
           <ChatArea
@@ -390,24 +434,15 @@ function App() {
         />
       )}
       {showCheatsheet && <ShortcutCheatsheet onClose={() => setShowCheatsheet(false)} />}
-    </div>
-  );
-}
-
-function ModePlaceholder({ mode }: { mode: AppMode }) {
-  const info = {
-    chat:   { icon: '💬', title: 'Chat Mode',   desc: '' },
-    cowork: { icon: '🤝', title: 'Cowork Mode', desc: 'Agentic task management with approval gates, dual-zone layout, and document production. Coming in Phase 10.' },
-    code:   { icon: '💻', title: 'Code Mode',   desc: 'Software development workspace with diff pane, terminal, file editor, and live preview. Coming in Phase 11.' },
-  }[mode];
-  return (
-    <div className="mode-placeholder">
-      <div className="mode-placeholder-inner">
-        <span className="mode-placeholder-icon">{info.icon}</span>
-        <h2 className="mode-placeholder-title">{info.title}</h2>
-        <p className="mode-placeholder-desc">{info.desc}</p>
-        <p className="mode-placeholder-tag">Use Ctrl+1 to return to Chat</p>
-      </div>
+      {showSettings && (
+        <SettingsPanel
+          capabilities={capabilities}
+          status={status}
+          sessions={sessions}
+          onSetPersona={handleSetPersona}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
     </div>
   );
 }

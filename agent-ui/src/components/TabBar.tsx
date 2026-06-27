@@ -1,32 +1,52 @@
+import type { ReactNode } from 'react';
+import { MessageSquare, Users, Code2 } from 'lucide-react';
+import type { ConnectionStatus } from '../types';
+
 export type AppMode = 'chat' | 'cowork' | 'code';
 
 interface Props {
-  mode: AppMode;
+  mode:   AppMode;
+  status: ConnectionStatus;
   onChange: (mode: AppMode) => void;
 }
 
-const TABS: { id: AppMode; label: string; key: string }[] = [
-  { id: 'chat',   label: 'Chat',   key: '1' },
-  { id: 'cowork', label: 'Cowork', key: '2' },
-  { id: 'code',   label: 'Code',   key: '3' },
+const MODES: { id: AppMode; label: string; icon: ReactNode }[] = [
+  { id: 'chat',   label: 'Chat',   icon: <MessageSquare size={13}/> },
+  { id: 'cowork', label: 'Cowork', icon: <Users size={13}/> },
+  { id: 'code',   label: 'Code',   icon: <Code2 size={13}/> },
 ];
 
-export function TabBar({ mode, onChange }: Props) {
+export function TabBar({ mode, status, onChange }: Props) {
   return (
-    <div className="tab-bar">
-      <span className="tab-bar-logo">Agent Lab</span>
-      <div className="tab-list">
-        {TABS.map(t => (
+    <header className="app-bar">
+      <div className="app-bar-logo">
+        <img src="/logo.png" alt="M1" className="app-bar-logo-img"/>
+        <span className="app-bar-logo-text">
+          MACH<span style={{ color: 'var(--blue)' }}>1</span>
+        </span>
+      </div>
+
+      <nav className="app-bar-center">
+        {MODES.map(m => (
           <button
-            key={t.id}
-            className={`tab-btn tab-btn--${t.id} ${mode === t.id ? 'tab-btn--active' : ''}`}
-            onClick={() => onChange(t.id)}
-            title={`${t.label} · Ctrl+${t.key}`}
+            key={m.id}
+            className={`mode-btn mode-btn--${m.id} ${mode === m.id ? 'mode-btn--active' : ''}`}
+            onClick={() => onChange(m.id)}
+            title={`${m.label} · Ctrl+${MODES.indexOf(m) + 1}`}
           >
-            {t.label}
+            {m.icon} {m.label}
           </button>
         ))}
+      </nav>
+
+      <div className="app-bar-right">
+        <div className={`app-bar-status app-bar-status--${status}`}>
+          <span className={`dot dot--${status}`}/>
+          <span className="app-bar-status-label">
+            {status === 'online' ? 'Online' : status === 'connecting' ? 'Connecting' : 'Offline'}
+          </span>
+        </div>
       </div>
-    </div>
+    </header>
   );
 }

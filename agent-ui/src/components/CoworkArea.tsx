@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Circle, RefreshCw, Pause, CheckCircle2, XCircle, Check, X, Users } from 'lucide-react';
 
 type TaskStatus = 'pending' | 'running' | 'awaiting' | 'done' | 'failed';
 
@@ -11,13 +12,15 @@ interface Task {
   createdAt: string;
 }
 
-const STATUS_ICON: Record<TaskStatus, string> = {
-  pending:  '○',
-  running:  '⟳',
-  awaiting: '⏸',
-  done:     '✓',
-  failed:   '✗',
-};
+function StatusIcon({ status }: { status: TaskStatus }) {
+  switch (status) {
+    case 'pending':  return <Circle size={12}/>;
+    case 'running':  return <RefreshCw size={12}/>;
+    case 'awaiting': return <Pause size={12}/>;
+    case 'done':     return <CheckCircle2 size={12}/>;
+    case 'failed':   return <XCircle size={12}/>;
+  }
+}
 const STATUS_CLASS: Record<TaskStatus, string> = {
   pending:  'task-status--pending',
   running:  'task-status--running',
@@ -121,7 +124,7 @@ export function CoworkArea() {
             >
               <div className="task-card-top">
                 <span className={`task-status-icon ${STATUS_CLASS[task.status]}`}>
-                  {STATUS_ICON[task.status]}
+                  <StatusIcon status={task.status}/>
                 </span>
                 <span className="task-card-title">{task.title}</span>
               </div>
@@ -149,7 +152,7 @@ export function CoworkArea() {
             <div className="cowork-steps">
               {selectedTask.steps.map((s, i) => (
                 <div key={i} className={`cowork-step ${s.done ? 'cowork-step--done' : 'cowork-step--pending'}`}>
-                  <span className="cowork-step-icon">{s.done ? '✓' : '○'}</span>
+                  <span className="cowork-step-icon">{s.done ? <Check size={11}/> : <Circle size={11}/>}</span>
                   <span className="cowork-step-label">{s.label}</span>
                 </div>
               ))}
@@ -164,13 +167,13 @@ export function CoworkArea() {
 
             {selectedTask.status === 'awaiting' && (
               <div className="cowork-approval">
-                <p className="cowork-approval-msg">⏸ Agent is waiting for your approval to continue.</p>
+                <p className="cowork-approval-msg"><Pause size={11}/> Agent is waiting for your approval to continue.</p>
                 <div className="cowork-approval-btns">
                   <button className="btn-approve" onClick={() => setTasks(prev => prev.map(t => t.id === selectedTask.id ? { ...t, status: 'running' as TaskStatus } : t))}>
-                    ✓ Approve &amp; Continue
+                    <Check size={12}/> Approve &amp; Continue
                   </button>
                   <button className="btn-reject" onClick={() => setTasks(prev => prev.map(t => t.id === selectedTask.id ? { ...t, status: 'failed' as TaskStatus } : t))}>
-                    ✗ Cancel Task
+                    <X size={12}/> Cancel Task
                   </button>
                 </div>
               </div>
@@ -178,7 +181,7 @@ export function CoworkArea() {
           </>
         ) : (
           <div className="cowork-output-empty">
-            <span className="cowork-output-empty-icon">🤝</span>
+            <span className="cowork-output-empty-icon"><Users size={28}/></span>
             <p>Select a task to see its steps and output</p>
             <p className="cowork-output-empty-sub">Tasks run locally using your agent — cloud only when confidence is low</p>
           </div>

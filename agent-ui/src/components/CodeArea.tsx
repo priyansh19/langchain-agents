@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import type { ReactNode } from 'react';
+import { FolderOpen, FileDiff, MessageSquare, Terminal, FileText } from 'lucide-react';
 
 type PaneType = 'chat' | 'diff' | 'files' | 'terminal';
 
@@ -24,11 +26,11 @@ export function CodeArea() {
   const [activePane, setActivePane] = useState<PaneType>('files');
   const [permission, setPermission] = useState<'ask' | 'auto' | 'plan'>('ask');
 
-  const PANES: { id: PaneType; label: string }[] = [
-    { id: 'files',    label: '📁 Files' },
-    { id: 'diff',     label: '⊟ Diff' },
-    { id: 'chat',     label: '💬 Chat' },
-    { id: 'terminal', label: '⌨ Terminal' },
+  const PANES: { id: PaneType; icon: ReactNode; label: string }[] = [
+    { id: 'files',    icon: <FolderOpen size={12}/>,    label: 'Files' },
+    { id: 'diff',     icon: <FileDiff size={12}/>,      label: 'Diff' },
+    { id: 'chat',     icon: <MessageSquare size={12}/>, label: 'Chat' },
+    { id: 'terminal', icon: <Terminal size={12}/>,      label: 'Terminal' },
   ];
 
   return (
@@ -43,7 +45,7 @@ export function CodeArea() {
               key={p.id}
               className={`code-pane-tab ${activePane === p.id ? 'code-pane-tab--active' : ''}`}
               onClick={() => setActivePane(p.id)}
-            >{p.label}</button>
+            >{p.icon} {p.label}</button>
           ))}
         </div>
         <div className="permission-btns">
@@ -65,7 +67,7 @@ export function CodeArea() {
             <p className="file-tree-label">workspace/</p>
             {DEMO_FILES.map(f => (
               <div key={f.name} className="file-row">
-                <span className="file-icon">📄</span>
+                <span className="file-icon"><FileText size={12}/></span>
                 <span className="file-name">{f.name}</span>
                 <span className="file-meta">{f.size} · {f.modified}</span>
               </div>
@@ -91,7 +93,7 @@ export function CodeArea() {
 
         {activePane === 'chat' && (
           <div className="code-chat-placeholder">
-            <span className="code-chat-icon">💬</span>
+            <span className="code-chat-icon"><MessageSquare size={28}/></span>
             <p>Code chat connects to the main agent.</p>
             <p className="code-chat-sub">Switch to Chat mode (Ctrl+1) to send messages — output appears here when Code mode is active.</p>
           </div>

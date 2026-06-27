@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Copy, Check, Download, X } from 'lucide-react';
 
 interface Props {
   content: string;
@@ -30,9 +31,9 @@ export function ArtifactPanel({ content, lang, onClose }: Props) {
       <div className="artifact-header">
         <span className="artifact-lang">{lang || 'code'}</span>
         <div className="artifact-actions">
-          <button className="artifact-btn" onClick={copy}>{copied ? '✓ Copied' : '⎘ Copy'}</button>
-          <button className="artifact-btn" onClick={download}>↓ Download</button>
-          <button className="artifact-btn artifact-btn--close" onClick={onClose}>✕</button>
+          <button className="artifact-btn" onClick={copy}>{copied ? <><Check size={11}/> Copied</> : <><Copy size={11}/> Copy</>}</button>
+          <button className="artifact-btn" onClick={download}><Download size={11}/> Download</button>
+          <button className="artifact-btn artifact-btn--close" onClick={onClose}><X size={12}/></button>
         </div>
       </div>
       <div className="artifact-body">
