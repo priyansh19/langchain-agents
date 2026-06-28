@@ -1,18 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Capabilities, ChatMessage, ConnectionStatus, Session, Project } from './types';
-import { fetchCapabilities, sendChat, clearConversation, setPersona } from './api';
+import { fetchCapabilities, sendChat, createSession, deleteSessionRemote } from './api';
 import { Sidebar } from './components/Sidebar';
 import { ChatArea } from './components/ChatArea';
 import { CommandPalette, type Command } from './components/CommandPalette';
-import { TabBar, type AppMode } from './components/TabBar';
+import { TabBar } from './components/TabBar';
 import { ShortcutCheatsheet } from './components/ShortcutCheatsheet';
-import { CoworkArea } from './components/CoworkArea';
-import { CodeArea } from './components/CodeArea';
 import { SettingsPanel } from './components/SettingsPanel';
 
 let msgCounter = 0;
 const uid          = () => `msg-${++msgCounter}`;
-const newSessionId = () => `session-${Date.now()}`;
+const newSessionId = () => crypto.randomUUID();
 const now          = () => new Date().toISOString();
 const STORAGE_KEY  = 'agent-lab-sessions';
 const DRAFT_KEY    = 'agent-lab-drafts';
@@ -72,20 +70,19 @@ function parseImportedSession(content: string, agentName?: string): Session {
 }
 
 function App() {
-  const [capabilities,  setCapabilities]  = useState<Capabilities | null>(null);
-  const [status,        setStatus]        = useState<ConnectionStatus>('connecting');
-  const [sessions,      setSessions]      = useState<Session[]>(() => loadSessions());
-  const [projects,      setProjects]      = useState<Project[]>(() => loadProjects());
-  const [activeId,      setActiveId]      = useState<string>(() => {
+  const [capabilities,   setCapabilities]   = useState<Capabilities | null>(null);
+  const [status,         setStatus]         = useState<ConnectionStatus>('connecting');
+  const [sessions,       setSessions]       = useState<Session[]>(() => loadSessions());
+  const [projects,       setProjects]       = useState<Project[]>(() => loadProjects());
+  const [activeId,       setActiveId]       = useState<string>(() => {
     const saved = loadSessions();
     return saved.length > 0 ? saved[saved.length - 1].id : '';
   });
-  const [drafts,        setDrafts]        = useState<Record<string, string>>(() => loadDrafts());
-  const [isGenerating,  setIsGenerating]  = useState(false);
-  const [showUndo,      setShowUndo]      = useState(false);
-  const [showPalette,   setShowPalette]   = useState(false);
-  const [showSettings,  setShowSettings]  = useState(false);
-  const [mode,          setMode]          = useState<AppMode>('chat');
+  const [drafts,         setDrafts]         = useState<Record<string, string>>(() => loadDrafts());
+  const [isGenerating,   setIsGenerating]   = useState(false);
+  const [showUndo,       setShowUndo]       = useState(false);
+  const [showPalette,    setShowPalette]    = useState(false);
+  const [showSettings,   setShowSettings]   = useState(false);
   const [showCheatsheet, setShowCheatsheet] = useState(false);
 
   const retryRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -94,12 +91,10 @@ function App() {
 
   const activeSession  = sessions.find(s => s.id === activeId);
   const activeMessages = activeSession?.messages ?? [];
-  // Newest live (non-archived) session — determines who can receive new messages
-  const latestLiveId   = sessions
-    .filter(s => !s.archived)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]?.id ?? '';
-  const canSend        = status === 'online' && activeId === latestLiveId;
-  const currentDraft   = drafts[activeId] ?? '';
+
+  // A session is sendable if online, exists, and not explicitly archived
+  const canSend = status === 'online' && !!activeSession && !activeSession.archived;
+  const currentDraft = drafts[activeId] ?? '';
 
   useEffect(() => { saveSessions(sessions); }, [sessions]);
   useEffect(() => { saveDrafts(drafts); }, [drafts]);
@@ -119,7 +114,7 @@ function App() {
           const id = newSessionId();
           const session: Session = {
             id, createdAt: now(), agentName: caps.agent_name,
-            messages: [{ id: uid(), role: 'assistant', text: "Hi! I'm ready. Ask me anything.", timestamp: now() }],
+            messages: [{ id: uid(), role: 'assistant', text: "Hi! I'm Mach1. Ask me anything.", timestamp: now() }],
           };
           setActiveId(id);
           return [session];
@@ -137,14 +132,10 @@ function App() {
     return () => { if (retryRef.current) clearTimeout(retryRef.current); };
   }, [connect]);
 
-  // Keyboard shortcuts
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); setShowPalette(p => !p); }
       if (e.altKey && e.key === 'n') { e.preventDefault(); if (status === 'online') handleNewSession(); }
-      if ((e.ctrlKey || e.metaKey) && e.key === '1') { e.preventDefault(); setMode('chat'); }
-      if ((e.ctrlKey || e.metaKey) && e.key === '2') { e.preventDefault(); setMode('cowork'); }
-      if ((e.ctrlKey || e.metaKey) && e.key === '3') { e.preventDefault(); setMode('code'); }
       if ((e.ctrlKey || e.metaKey) && e.key === '/') { e.preventDefault(); setShowCheatsheet(p => !p); }
     }
     document.addEventListener('keydown', onKeyDown);
@@ -156,9 +147,9 @@ function App() {
   }, []);
 
   const handleSend = useCallback(async (text: string, systemPrompt?: string) => {
-    const loadId    = uid();
-    const targetId  = activeId;
-    const ctrl      = new AbortController();
+    const loadId   = uid();
+    const targetId = activeId;
+    const ctrl     = new AbortController();
     abortRef.current = ctrl;
 
     setIsGenerating(true);
@@ -169,7 +160,6 @@ function App() {
       { id: loadId, role: 'assistant', text: '', loading: true, timestamp: now() },
     ]);
 
-    // Auto-title: if this is the first user message and session has no name
     setSessions(prev => prev.map(s => {
       if (s.id !== targetId || s.name) return s;
       const hasUserMsg = s.messages.some(m => m.role === 'user');
@@ -177,32 +167,37 @@ function App() {
       return s;
     }));
 
-    // Undo toast for 3s
     setShowUndo(true);
     undoTimRef.current = setTimeout(() => setShowUndo(false), 3000);
 
     try {
-      const data = await sendChat(text, ctrl.signal, systemPrompt);
+      // Lazy backend session creation — only created on first message
+      let backendId = sessions.find(s => s.id === targetId)?.backendId;
+      if (!backendId) {
+        backendId = await createSession();
+        setSessions(prev => prev.map(s => s.id === targetId ? { ...s, backendId } : s));
+      }
+
+      const data = await sendChat(text, backendId, ctrl.signal, systemPrompt);
       clearTimeout(undoTimRef.current ?? undefined);
       setShowUndo(false);
       updateSession(targetId, msgs => msgs.map(m =>
         m.id === loadId ? {
           id: loadId, role: 'assistant' as const,
-          text:        data.response,
-          tool_steps:  data.tool_steps,
-          sources:     data.sources,
-          confidence:  data.confidence,
-          handled_by:  data.handled_by,
-          memory_used:    data.memory_used,
-          facts_learned:  data.facts_learned,
-          timestamp:      now(),
+          text:         data.response,
+          tool_steps:   data.tool_steps,
+          sources:      data.sources,
+          confidence:   data.confidence,
+          handled_by:   data.handled_by,
+          memory_used:  data.memory_used,
+          facts_learned: data.facts_learned,
+          timestamp:    now(),
         } : m
       ));
     } catch (err) {
       clearTimeout(undoTimRef.current ?? undefined);
       setShowUndo(false);
       if (err instanceof Error && err.name === 'AbortError') {
-        // Undo: remove both the user message and the loading bubble
         updateSession(targetId, msgs => msgs.filter(m => m.id !== loadId && !(m.role === 'user' && m.text === text)));
       } else {
         updateSession(targetId, msgs => msgs.map(m =>
@@ -216,11 +211,9 @@ function App() {
     } finally {
       setIsGenerating(false);
     }
-  }, [activeId, updateSession]);
+  }, [activeId, sessions, updateSession]);
 
-  const handleStop = useCallback(() => {
-    abortRef.current?.abort();
-  }, []);
+  const handleStop = useCallback(() => { abortRef.current?.abort(); }, []);
 
   const handleUndo = useCallback(() => {
     clearTimeout(undoTimRef.current ?? undefined);
@@ -239,10 +232,8 @@ function App() {
   }, [activeMessages, activeId, updateSession, handleSend]);
 
   const handleEditMessage = useCallback(async (msgId: string, newText: string) => {
-    const msgs    = activeMessages;
-    const msgIdx  = msgs.findIndex(m => m.id === msgId);
+    const msgIdx = activeMessages.findIndex(m => m.id === msgId);
     if (msgIdx === -1) return;
-    // Remove the edited message and everything after it
     updateSession(activeId, ms => ms.slice(0, msgIdx));
     await handleSend(newText);
   }, [activeMessages, activeId, updateSession, handleSend]);
@@ -253,17 +244,16 @@ function App() {
     ));
   }, [activeId, updateSession]);
 
-  const handleNewSession = useCallback(async () => {
-    await clearConversation();
-    const id  = newSessionId();
-    const ts  = now();
+  const handleNewSession = useCallback(() => {
+    // Pure local action — no backend call, no history wipe
+    const id = newSessionId();
     const session: Session = {
       id,
-      createdAt: ts,
+      createdAt: now(),
       agentName: capabilities?.agent_name,
-      messages: [],          // truly empty — no welcome noise, no old history
+      messages: [],
     };
-    setActiveId(id);         // switch BEFORE adding so the render sees it immediately
+    setActiveId(id);
     setSessions(prev => [...prev, session]);
   }, [capabilities]);
 
@@ -283,15 +273,17 @@ function App() {
   }, []);
 
   const handlePermanentDelete = useCallback((id: string) => {
+    const session = sessions.find(s => s.id === id);
+    if (session?.backendId) deleteSessionRemote(session.backendId);
     setSessions(prev => {
       const next = prev.filter(s => s.id !== id);
       if (id === activeId) setActiveId(next.filter(s => !s.archived).slice(-1)[0]?.id ?? '');
       return next;
     });
     setDrafts(prev => { const n = { ...prev }; delete n[id]; return n; });
-  }, [activeId]);
+  }, [activeId, sessions]);
 
-  const handleRenameSession = useCallback((id: string, name: string) => {
+  const handleRenameSession  = useCallback((id: string, name: string) => {
     setSessions(prev => prev.map(s => s.id === id ? { ...s, name } : s));
   }, []);
 
@@ -361,15 +353,6 @@ function App() {
     setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, projectId } : s));
   }, []);
 
-  const handleSetPersona = useCallback(async (persona: string) => {
-    await setPersona(persona);
-    await clearConversation();
-    updateSession(activeId, msgs => [
-      ...msgs,
-      { id: uid(), role: 'assistant', text: `Persona updated! I'm now: "${persona}". Start chatting!`, timestamp: now() },
-    ]);
-  }, [activeId, updateSession]);
-
   const lastMsgFailed = activeMessages.length > 0 &&
     activeMessages[activeMessages.length - 1].text?.startsWith('⚠️');
 
@@ -382,7 +365,7 @@ function App() {
 
   return (
     <div className="app">
-      <TabBar mode={mode} status={status} onChange={setMode} />
+      <TabBar status={status} />
       <div className="app-body">
         <Sidebar
           sessions={sessions}
@@ -404,28 +387,22 @@ function App() {
           onMoveToProject={handleMoveToProject}
           onOpenSettings={() => setShowSettings(true)}
         />
-        {mode === 'chat' ? (
-          <ChatArea
-            messages={activeMessages}
-            onSend={handleSend}
-            onStop={handleStop}
-            onRetry={handleRetry}
-            onUndo={handleUndo}
-            onEditMessage={handleEditMessage}
-            onBookmarkMessage={handleBookmarkMessage}
-            disabled={!canSend}
-            isGenerating={isGenerating}
-            isArchived={!canSend && status === 'online'}
-            showRetry={canSend && lastMsgFailed && !isGenerating}
-            showUndo={showUndo}
-            draft={currentDraft}
-            onDraftChange={setDraft}
-          />
-        ) : mode === 'cowork' ? (
-          <CoworkArea />
-        ) : (
-          <CodeArea />
-        )}
+        <ChatArea
+          messages={activeMessages}
+          onSend={handleSend}
+          onStop={handleStop}
+          onRetry={handleRetry}
+          onUndo={handleUndo}
+          onEditMessage={handleEditMessage}
+          onBookmarkMessage={handleBookmarkMessage}
+          disabled={!canSend}
+          isGenerating={isGenerating}
+          isArchived={!!activeSession?.archived}
+          showRetry={canSend && lastMsgFailed && !isGenerating}
+          showUndo={showUndo}
+          draft={currentDraft}
+          onDraftChange={setDraft}
+        />
       </div>
       {showPalette && (
         <CommandPalette
@@ -439,7 +416,7 @@ function App() {
           capabilities={capabilities}
           status={status}
           sessions={sessions}
-          onSetPersona={handleSetPersona}
+          onSetPersona={async () => {}}
           onClose={() => setShowSettings(false)}
         />
       )}

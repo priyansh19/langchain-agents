@@ -154,8 +154,20 @@ tools = [
 ]
 
 system_prompt = ""
-turn_count = 0
 config = {"threshold": 7}
+sessions: dict = {}
+session_turns: dict = {}
+
+def create_session() -> str:
+    sid = str(uuid.uuid4())
+    sessions[sid] = []
+    session_turns[sid] = 0
+    return sid
+
+def delete_session(sid: str):
+    sessions.pop(sid, None)
+    session_turns.pop(sid, None)
+
 
 def triage_node(state: AgentState) -> AgentState:
     message = state["messages"][-1].content
@@ -206,14 +218,12 @@ def claude_node(state: AgentState) -> AgentState:
     return {**state, "messages": [AIMessage(content=response)], "handled_by": "claude", "tool_steps": [], "memory_used": False}
 
 def memory_save_node(state: AgentState) -> AgentState:
-    global turn_count
     messages = state["messages"]
     user_msg = next((m for m in reversed(messages) if isinstance(m, HumanMessage)), None)
     ai_msg   = next((m for m in reversed(messages) if isinstance(m, AIMessage)), None)
     if user_msg: save_episodic("user", user_msg.content)
     if ai_msg:   save_episodic("assistant", ai_msg.content)
-    turn_count += 1
-    return {**state, "turn_count": turn_count}
+    return {**state, "turn_count": state["turn_count"] + 1}
 
 SUMMARIZE_EVERY = 10
 
@@ -251,35 +261,36 @@ graph_builder.add_edge("summarize", END)
 
 graph = graph_builder.compile()
 
-conversation_history = []
+def chat(message: str, session_id: str = None, force_model: str = None, system_prompt_override: str = None) -> dict:
+    global system_prompt
+    if session_id not in sessions:
+        sessions[session_id] = []
+        session_turns[session_id] = 0
 
-def chat(message: str, force_model: str = None, system_prompt_override: str = None) -> dict:
-    global turn_count
-    if force_model == "local":   override_score = 10
+    history = sessions[session_id]
+
+    if force_model == "local":    override_score = 10
     elif force_model == "claude": override_score = 0
     else:                         override_score = None
 
-    conversation_history.append(HumanMessage(content=message))
-    global system_prompt
+    history.append(HumanMessage(content=message))
     if system_prompt_override:
         system_prompt = system_prompt_override
 
     initial_state: AgentState = {
-        "messages":     conversation_history,
+        "messages":     history,
         "confidence":   override_score if override_score is not None else 5,
         "handled_by":   "",
         "tool_steps":   [],
         "memory_used":  False,
         "facts_learned": 0,
-        "turn_count":   turn_count,
+        "turn_count":   session_turns.get(session_id, 0),
     }
-
-    if override_score is not None:
-        initial_state["confidence"] = override_score
 
     result = graph.invoke(initial_state)
     response = result["messages"][-1].content
-    conversation_history.append(AIMessage(content=response))
+    history.append(AIMessage(content=response))
+    session_turns[session_id] = result["turn_count"]
 
     return {
         "response":     response,
@@ -290,6 +301,12 @@ def chat(message: str, force_model: str = None, system_prompt_override: str = No
         "facts_learned": result["facts_learned"],
     }
 
-def clear_history():
-    conversation_history.clear()
+def clear_history(session_id: str = None):
+    if session_id is None:
+        sessions.clear()
+        session_turns.clear()
+    elif session_id in sessions:
+        sessions[session_id] = []
+        session_turns[session_id] = 0
+
 

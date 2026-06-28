@@ -46,6 +46,7 @@ export interface ChatResponse {
 
 export interface Session {
   id: string;
+  backendId?: string;    // UUID returned by POST /session — lazy, set on first message
   name?: string;
   pinned?: boolean;
   archived?: boolean;

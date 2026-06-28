@@ -1,4 +1,4 @@
-# Phase 8 — LangGraph Tools Agent + Summarizer
+do # Phase 8 — LangGraph Tools Agent + Summarizer
 
 > Builds on Phase 7. Replaces the flat `create_react_agent` setup with a full **LangGraph state graph**, adds web search + MCP tool support, and closes the memory loop with a **Summarizer Agent** that distills episodic chats into semantic facts every N turns.
 

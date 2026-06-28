@@ -5,6 +5,7 @@ import { MessageBubble } from './MessageBubble';
 import { ArtifactPanel } from './ArtifactPanel';
 
 const PROMPT_FILES = [
+  'mach1.md',
   'claude-fable-5.md',
   'claude-opus-4.8-v2.md',
   'claude-opus-4.8.md',

@@ -1,91 +1,104 @@
 import { useState } from 'react';
-import { Circle, RefreshCw, Pause, CheckCircle2, XCircle, Check, X, Users } from 'lucide-react';
+import { Circle, RefreshCw, Pause, CheckCircle2, XCircle, Check, X, Users, Wrench } from 'lucide-react';
+import { planTask, executeTask } from '../api';
+import type { PlanStep } from '../api';
 
-type TaskStatus = 'pending' | 'running' | 'awaiting' | 'done' | 'failed';
+type TaskStatus = 'pending' | 'planning' | 'awaiting' | 'running' | 'done' | 'failed';
 
 interface Task {
   id: string;
   title: string;
   status: TaskStatus;
-  steps: { label: string; done: boolean }[];
+  steps: PlanStep[];
   output?: string;
+  toolSteps?: unknown[];
+  error?: string;
   createdAt: string;
+  autonomy: number;
 }
 
 function StatusIcon({ status }: { status: TaskStatus }) {
   switch (status) {
     case 'pending':  return <Circle size={12}/>;
-    case 'running':  return <RefreshCw size={12}/>;
+    case 'planning': return <RefreshCw size={12} className="spin"/>;
     case 'awaiting': return <Pause size={12}/>;
+    case 'running':  return <RefreshCw size={12} className="spin"/>;
     case 'done':     return <CheckCircle2 size={12}/>;
     case 'failed':   return <XCircle size={12}/>;
   }
 }
+
 const STATUS_CLASS: Record<TaskStatus, string> = {
   pending:  'task-status--pending',
-  running:  'task-status--running',
+  planning: 'task-status--running',
   awaiting: 'task-status--awaiting',
+  running:  'task-status--running',
   done:     'task-status--done',
   failed:   'task-status--failed',
 };
 
-const DEMO_TASKS: Task[] = [
-  {
-    id: 't1',
-    title: 'Draft project README',
-    status: 'done',
-    steps: [
-      { label: 'Read existing files', done: true },
-      { label: 'Generate outline', done: true },
-      { label: 'Write README.md', done: true },
-    ],
-    output: 'README.md written to workspace (342 words).',
-    createdAt: new Date(Date.now() - 120000).toISOString(),
-  },
-  {
-    id: 't2',
-    title: 'Summarise last 5 conversations',
-    status: 'awaiting',
-    steps: [
-      { label: 'Load session history', done: true },
-      { label: 'Extract key topics', done: true },
-      { label: 'Write summary — awaiting approval', done: false },
-    ],
-    createdAt: new Date(Date.now() - 30000).toISOString(),
-  },
-];
+const AUTONOMY_LABELS = ['Observe & Suggest', 'Plan & Propose', 'Act with Confirmation', 'Act Autonomously'];
 
 export function CoworkArea() {
-  const [tasks, setTasks]         = useState<Task[]>(DEMO_TASKS);
-  const [input, setInput]         = useState('');
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [autonomy, setAutonomy]   = useState(1);
+  const [tasks, setTasks]             = useState<Task[]>([]);
+  const [input, setInput]             = useState('');
+  const [selectedId, setSelectedId]   = useState<string | null>(null);
+  const [autonomy, setAutonomy]       = useState(2);
 
-  const AUTONOMY_LABELS = ['Observe & Suggest', 'Plan & Propose', 'Act with Confirmation', 'Act Autonomously'];
+  const selectedTask = tasks.find(t => t.id === selectedId) ?? null;
 
-  function submitTask() {
+  function updateTask(id: string, patch: Partial<Task>) {
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...patch } : t));
+  }
+
+  async function submitTask() {
     const title = input.trim();
     if (!title) return;
-    const newTask: Task = {
-      id: `t${Date.now()}`,
-      title,
-      status: 'pending',
-      steps: [],
-      createdAt: new Date().toISOString(),
-    };
-    setTasks(prev => [newTask, ...prev]);
+    const id = `t${Date.now()}`;
+    const task: Task = { id, title, status: 'planning', steps: [], createdAt: new Date().toISOString(), autonomy };
+    setTasks(prev => [task, ...prev]);
+    setSelectedId(id);
     setInput('');
+
+    try {
+      const steps = await planTask(title, autonomy);
+      if (autonomy >= 3) {
+        // Act Autonomously — skip approval gate
+        updateTask(id, { steps, status: 'running' });
+        const result = await executeTask(title, steps, autonomy);
+        updateTask(id, { status: 'done', output: result.output, toolSteps: result.tool_steps });
+      } else {
+        // Plan & Propose / Act with Confirmation — pause for approval
+        updateTask(id, { steps, status: 'awaiting' });
+      }
+    } catch (e) {
+      updateTask(id, { status: 'failed', error: String(e) });
+    }
+  }
+
+  async function approve(task: Task) {
+    updateTask(task.id, { status: 'running' });
+    try {
+      const result = await executeTask(task.title, task.steps, task.autonomy);
+      updateTask(task.id, { status: 'done', output: result.output, toolSteps: result.tool_steps });
+    } catch (e) {
+      updateTask(task.id, { status: 'failed', error: String(e) });
+    }
+  }
+
+  function reject(id: string) {
+    updateTask(id, { status: 'failed', error: 'Cancelled by user' });
   }
 
   return (
     <div className="cowork-wrap">
 
-      {/* Left column — task queue */}
+      {/* Left — task queue */}
       <div className="cowork-left">
         <div className="cowork-header">
           <span className="cowork-title">Cowork</span>
           <div className="autonomy-wrap">
-            <span className="autonomy-label">Autonomy:</span>
+            <span className="autonomy-label">Autonomy</span>
             <div className="autonomy-dial">
               {AUTONOMY_LABELS.map((l, i) => (
                 <button
@@ -119,8 +132,8 @@ export function CoworkArea() {
           {tasks.map(task => (
             <div
               key={task.id}
-              className={`task-card ${selectedTask?.id === task.id ? 'task-card--active' : ''}`}
-              onClick={() => setSelectedTask(task)}
+              className={`task-card ${selectedId === task.id ? 'task-card--active' : ''}`}
+              onClick={() => setSelectedId(task.id)}
             >
               <div className="task-card-top">
                 <span className={`task-status-icon ${STATUS_CLASS[task.status]}`}>
@@ -128,17 +141,22 @@ export function CoworkArea() {
                 </span>
                 <span className="task-card-title">{task.title}</span>
               </div>
-              <div className="task-card-steps">
-                {task.steps.map((s, i) => (
-                  <span key={i} className={`task-step-dot ${s.done ? 'task-step-dot--done' : ''}`} title={s.label} />
-                ))}
-              </div>
+              {task.steps.length > 0 && (
+                <div className="task-card-steps">
+                  {task.steps.map((_, i) => (
+                    <span
+                      key={i}
+                      className={`task-step-dot ${task.status === 'done' ? 'task-step-dot--done' : ''}`}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
       </div>
 
-      {/* Right column — output panel */}
+      {/* Right — detail panel */}
       <div className="cowork-right">
         {selectedTask ? (
           <>
@@ -149,41 +167,66 @@ export function CoworkArea() {
               </span>
             </div>
 
-            <div className="cowork-steps">
-              {selectedTask.steps.map((s, i) => (
-                <div key={i} className={`cowork-step ${s.done ? 'cowork-step--done' : 'cowork-step--pending'}`}>
-                  <span className="cowork-step-icon">{s.done ? <Check size={11}/> : <Circle size={11}/>}</span>
-                  <span className="cowork-step-label">{s.label}</span>
-                </div>
-              ))}
-            </div>
+            {selectedTask.steps.length > 0 && (
+              <div className="cowork-steps">
+                <p className="cowork-section-label">Plan</p>
+                {selectedTask.steps.map((s, i) => (
+                  <div key={i} className={`cowork-step ${selectedTask.status === 'done' ? 'cowork-step--done' : 'cowork-step--pending'}`}>
+                    <span className="cowork-step-icon">
+                      {selectedTask.status === 'done' ? <Check size={11}/> : <Circle size={11}/>}
+                    </span>
+                    <span className="cowork-step-label">{s.label}</span>
+                    {s.tool && <span className="cowork-step-tool"><Wrench size={9}/> {s.tool}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
 
-            {selectedTask.output && (
-              <div className="cowork-output-box">
-                <p className="cowork-output-label">Output</p>
-                <p className="cowork-output-text">{selectedTask.output}</p>
+            {selectedTask.status === 'planning' && (
+              <div className="cowork-status-msg">
+                <RefreshCw size={12} className="spin"/> Planning task…
+              </div>
+            )}
+
+            {selectedTask.status === 'running' && (
+              <div className="cowork-status-msg">
+                <RefreshCw size={12} className="spin"/> Executing…
               </div>
             )}
 
             {selectedTask.status === 'awaiting' && (
               <div className="cowork-approval">
-                <p className="cowork-approval-msg"><Pause size={11}/> Agent is waiting for your approval to continue.</p>
+                <p className="cowork-approval-msg"><Pause size={11}/> Review the plan above — approve to execute.</p>
                 <div className="cowork-approval-btns">
-                  <button className="btn-approve" onClick={() => setTasks(prev => prev.map(t => t.id === selectedTask.id ? { ...t, status: 'running' as TaskStatus } : t))}>
-                    <Check size={12}/> Approve &amp; Continue
+                  <button className="btn-approve" onClick={() => approve(selectedTask)}>
+                    <Check size={12}/> Approve &amp; Execute
                   </button>
-                  <button className="btn-reject" onClick={() => setTasks(prev => prev.map(t => t.id === selectedTask.id ? { ...t, status: 'failed' as TaskStatus } : t))}>
-                    <X size={12}/> Cancel Task
+                  <button className="btn-reject" onClick={() => reject(selectedTask.id)}>
+                    <X size={12}/> Cancel
                   </button>
                 </div>
+              </div>
+            )}
+
+            {selectedTask.output && (
+              <div className="cowork-output-box">
+                <p className="cowork-output-label">Output</p>
+                <pre className="cowork-output-text">{selectedTask.output}</pre>
+              </div>
+            )}
+
+            {selectedTask.error && (
+              <div className="cowork-error-box">
+                <p className="cowork-output-label">Error</p>
+                <p className="cowork-error-text">{selectedTask.error}</p>
               </div>
             )}
           </>
         ) : (
           <div className="cowork-output-empty">
             <span className="cowork-output-empty-icon"><Users size={28}/></span>
-            <p>Select a task to see its steps and output</p>
-            <p className="cowork-output-empty-sub">Tasks run locally using your agent — cloud only when confidence is low</p>
+            <p>Select a task to see its plan and output</p>
+            <p className="cowork-output-empty-sub">Tasks run locally · cloud only when confidence is low</p>
           </div>
         )}
       </div>
