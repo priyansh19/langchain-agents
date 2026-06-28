@@ -6,11 +6,11 @@ export async function fetchCapabilities(): Promise<Capabilities> {
   return res.json() as Promise<Capabilities>;
 }
 
-export async function sendChat(message: string, signal?: AbortSignal): Promise<ChatResponse> {
+export async function sendChat(message: string, signal?: AbortSignal, systemPrompt?: string): Promise<ChatResponse> {
   const res = await fetch('/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, system_prompt: systemPrompt }),
     signal,
   });
   if (!res.ok) throw new Error('Chat request failed');

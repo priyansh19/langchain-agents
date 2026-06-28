@@ -1,12 +1,22 @@
 import { useEffect, useRef, useState, KeyboardEvent } from 'react';
-import { Archive, MessageSquare, Bookmark, ArrowDown, RotateCcw, Undo2, Square, DollarSign } from 'lucide-react';
+import { Archive, MessageSquare, Bookmark, ArrowDown, RotateCcw, Undo2, Square, DollarSign, ChevronDown } from 'lucide-react';
 import type { ChatMessage } from '../types';
 import { MessageBubble } from './MessageBubble';
 import { ArtifactPanel } from './ArtifactPanel';
 
+const PROMPT_FILES = [
+  'claude-fable-5.md',
+  'claude-opus-4.8-v2.md',
+  'claude-opus-4.8.md',
+  'cursor.md',
+  'devin-cli.md',
+  'opencode.md',
+  'zed.md',
+];
+
 interface Props {
   messages:          ChatMessage[];
-  onSend:            (text: string) => void;
+  onSend:            (text: string, systemPrompt?: string) => void;
   onStop:            () => void;
   onRetry:           () => void;
   onUndo:            () => void;
@@ -38,6 +48,9 @@ export function ChatArea({
   const [showBookmarksOnly, setShowBookmarksOnly] = useState(false);
   const [showCost,          setShowCost]          = useState(false);
   const [artifact,          setArtifact]          = useState<{content: string; lang: string} | null>(null);
+  const [selectedPrompt,    setSelectedPrompt]    = useState('');
+  const [promptContent,     setPromptContent]     = useState('');
+  const [promptLocked,      setPromptLocked]      = useState(false);
 
   useEffect(() => {
     if (!showJump) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -61,12 +74,24 @@ export function ChatArea({
     ta.style.height = `${Math.min(ta.scrollHeight, 120)}px`;
   }
 
+  async function handlePromptSelect(filename: string) {
+    setSelectedPrompt(filename);
+    if (!filename) { setPromptContent(''); return; }
+    try {
+      const res = await fetch(`/prompts/${filename}`);
+      const text = await res.text();
+      setPromptContent(text);
+    } catch { setPromptContent(''); }
+  }
+
   function submit() {
     const text = draft.trim();
     if (!text || disabled || isGenerating || text.length > MAX_CHARS) return;
     onDraftChange('');
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
-    onSend(text);
+    const isFirst = messages.length === 0 && !promptLocked;
+    if (isFirst) setPromptLocked(true);
+    onSend(text, isFirst && promptContent ? promptContent : undefined);
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
@@ -165,6 +190,30 @@ export function ChatArea({
           )}
           {showUndo && (
             <button className="btn-undo" onClick={onUndo}><Undo2 size={12}/> Undo send</button>
+          )}
+        </div>
+      )}
+
+      {messages.length === 0 && !promptLocked && !isArchived && (
+        <div className="prompt-selector-bar">
+          <span className="prompt-selector-label">System prompt</span>
+          <div className="prompt-selector-wrap">
+            <select
+              className="prompt-selector-select"
+              value={selectedPrompt}
+              onChange={e => handlePromptSelect(e.target.value)}
+            >
+              <option value="">None (default)</option>
+              {PROMPT_FILES.map(f => (
+                <option key={f} value={f}>{f.replace('.md', '')}</option>
+              ))}
+            </select>
+            <ChevronDown size={12} className="prompt-selector-chevron"/>
+          </div>
+          {selectedPrompt && (
+            <span className="prompt-selector-active">
+              ✓ {selectedPrompt.replace('.md', '')}
+            </span>
           )}
         </div>
       )}

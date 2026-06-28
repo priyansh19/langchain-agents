@@ -1,214 +1,295 @@
-from email.mime import message
-
-from langchain_core.tools import tool
+from typing import TypedDict, Annotated
+from langgraph.graph import StateGraph, END
+from langgraph.graph.message import add_messages
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_community.tools import DuckDuckGoSearchRun, WikipediaQueryRun
+from langchain_community.utilities import WikipediaAPIWrapper
+from langchain_community.tools.shell import ShellTool
+from langchain_community.tools.file_management import ListDirectoryTool, FileSearchTool
+from langchain_experimental.utilities import PythonREPL
+from langgraph.prebuilt import ToolNode
+from langchain_core.tools import tool as tool_decorator
 from langchain_ollama import ChatOllama
-from langgraph.prebuilt import create_react_agent
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-import subprocess
-import os
-import warnings
-import chromadb
-import uuid
+from langchain_core.tools import tool
+import requests
+import chromadb, uuid, subprocess, os, warnings
 from chromadb.utils import embedding_functions
+from bs4 import BeautifulSoup
+
+class AgentState(TypedDict):
+    messages:     Annotated[list, add_messages]
+    confidence:   int
+    handled_by:   str
+    tool_steps:   list
+    memory_used:  bool
+    facts_learned: int
+    turn_count:   int
+
+warnings.filterwarnings("ignore")
+WORKSPACE = "workspace"
+os.makedirs(WORKSPACE, exist_ok=True)
 
 chroma_client = chromadb.PersistentClient(path="memory")
 ollama_ef = embedding_functions.OllamaEmbeddingFunction(
     url="http://localhost:11434/api/embeddings",
     model_name="nomic-embed-text"
 )
-memory_collection = chroma_client.get_or_create_collection(
-    name="chat_memory",
-    embedding_function=ollama_ef
-)
 
-def save_memory(role: str, content: str):
-    memory_collection.add(
-        documents=[f"{role}: {content}"],
-        ids=[str(uuid.uuid4())]
-    )
+episodic = chroma_client.get_or_create_collection("episodic_memory", embedding_function=ollama_ef)
+semantic  = chroma_client.get_or_create_collection("semantic_memory",  embedding_function=ollama_ef)
 
-def retrieve_memories(query: str, n_results: int = 3) -> str:
-    try:
-        if memory_collection.count() == 0:
-            return ""
-        results = memory_collection.query(query_texts=[query], n_results=n_results)
-        docs = results["documents"][0] if results["documents"] else []
-        return "\n".join(docs) if docs else ""
-    except Exception as e:
-        print(f"Error occurred while retrieving memories: {e}")
-        return ""
-    
-semantic_collection = chroma_client.get_or_create_collection(
-    name="semantic_memory",
-    embedding_function=ollama_ef
-)
+def save_episodic(role: str, content: str):
+    episodic.add(documents=[f"{role}: {content}"], ids=[str(uuid.uuid4())])
 
-def extract_facts(user_msg: str, assistant_response: str) -> list[str]:
-    prompt = f"""Extract 1-3 short factual statements about the user or their project from this exchange. Reply with one fact per line. If nothing useful, reply with just the word NONE. User: {user_msg} Assistant: {assistant_response}"""
-    response = llm.invoke([HumanMessage(content=prompt)])
-    print("DEBUG extract_facts raw:", response)
-    lines = [l.strip() for l in response.content.strip().split('\n') if l.strip()]
-    return [] if lines == ['NONE'] else lines
+def retrieve_episodic(query: str, n=3) -> str:
+    if episodic.count() == 0: return ""
+    docs = episodic.query(query_texts=[query], n_results=n)["documents"][0]
+    return "\n".join(docs)
 
-def save_fact(fact: str):
-    semantic_collection.add(
-        documents=[fact],
-        ids=[str(uuid.uuid4())]
-    )
-
-def retrieve_facts(query: str, n_results: int = 3) -> str:
-    try:
-        if semantic_collection.count() == 0:
-            return ""
-        results = semantic_collection.query(query_texts=[query], n_results=n_results)
-        docs = results["documents"][0] if results["documents"] else []
-        return "\n".join(docs) if docs else ""
-    except Exception as e:
-        print(f"Error occurred while retrieving facts: {e}")
-        return ""
-
-warnings.filterwarnings("ignore", message=".*create_react_agent.*")
-WORKSPACE = "workspace"
-os.makedirs(WORKSPACE, exist_ok=True)
-
-@tool
-def create_file(filename: str, content: str) -> str:
-    """Create a file with the given filename and content."""
-    filepath = os.path.join(WORKSPACE, filename)
-    with open(filepath, "w") as f:
-        f.write(content)
-    return f"File '{filename}' created successfully."
-
-@tool
-def read_file(filename: str) -> str:
-    """Read and return the contents of a file from the workspace."""
-    filepath = os.path.join(WORKSPACE, filename)
-    if not os.path.exists(filepath):
-        return f"Error: '{filename}' does not exist."
-    with open(filepath, "r") as f:
-        return f.read()
-
-@tool
-def edit_file(filename: str, content: str) -> str:
-    """COMPLETELY REPLACES all existing content in the file. Use only when you want to overwrite everything."""
-
-    filepath = os.path.join(WORKSPACE, filename)
-    if not os.path.exists(filepath):
-        return f"Error: '{filename}' does not exist. Use create_file to make it first."
-    with open(filepath, "w") as f:
-        f.write(content)
-    return f"File '{filename}' updated successfully."
-
-@tool
-def append_to_file(filename: str, content: str) -> str:
-    """Adds new content to the END of an existing file, keeping all existing content intact. Use this to add lines without losing what is already there."""
-
-    filepath = os.path.join(WORKSPACE, filename)
-    if not os.path.exists(filepath):
-        return f"Error: '{filename}' does not exist. Use create_file to make it first."
-    with open(filepath, "a") as f:
-        f.write("\n" + content)
-    return f"Content appended to '{filename}' successfully."
+def retrieve_semantic(query: str, n=3) -> str:
+    if semantic.count() == 0: return ""
+    docs = semantic.query(query_texts=[query], n_results=n)["documents"][0]
+    return "\n".join(docs)
 
 llm = ChatOllama(model="gemma4:latest")
 
 def score_confidence(message: str) -> int:
-    prompt = f"""Rate how confidently you can answer this request on a scale of 1 to 10, REPLY with ONLY a single number, nothing else. Request: {message}"""
-
-    response = llm.invoke([HumanMessage(content=prompt)])
+    prompt = f"Rate how confidently you can answer this on a scale of 1-10. Reply with ONLY a number. Request: {message}"
     try:
-        return int(response.content.strip())
-    except (ValueError):
+        return int(llm.invoke([HumanMessage(content=prompt)]).content.strip())
+    except:
         return 5
 
-tools = [create_file, read_file, append_to_file, edit_file]
-system_prompt = SystemMessage(content="You are a friendly and helpful assistant. You have file tools available but only use them when the user explicitly asks to create, read, edit, or manage files. For all other conversation, respond naturally.")
-agent = create_react_agent(llm, tools, prompt=system_prompt)
+@tool
+def create_file(filename: str, content: str) -> str:
+    """Create a file with the given filename and content."""
+    with open(os.path.join(WORKSPACE, filename), "w") as f:
+        f.write(content)
+    return f"File '{filename}' created."
 
-CONFIDENCE_THRESHOLD = 7
+@tool
+def read_file(filename: str) -> str:
+    """Read and return the contents of a file."""
+    path = os.path.join(WORKSPACE, filename)
+    if not os.path.exists(path): return f"Error: '{filename}' does not exist."
+    with open(path) as f: return f.read()
+
+@tool
+def edit_file(filename: str, content: str) -> str:
+    """Completely replace a file's content."""
+    path = os.path.join(WORKSPACE, filename)
+    if not os.path.exists(path): return f"Error: '{filename}' does not exist."
+    with open(path, "w") as f: f.write(content)
+    return f"File '{filename}' updated."
+
+@tool
+def append_to_file(filename: str, content: str) -> str:
+    """Append content to the end of an existing file."""
+    path = os.path.join(WORKSPACE, filename)
+    if not os.path.exists(path): return f"Error: '{filename}' does not exist."
+    with open(path, "a") as f: f.write("\n" + content)
+    return f"Appended to '{filename}'."
+
+@tool
+def delete_file(filename: str) -> str:
+    """Delete a file from the workspace."""
+    path = os.path.join(WORKSPACE, filename)
+    if not os.path.exists(path): return f"Error: '{filename}' does not exist."
+    os.remove(path)
+    return f"File '{filename}' deleted."
+
+@tool
+def edit_section(filename: str, old_text: str, new_text: str) -> str:
+    """Replace a specific section of text in a file without rewriting the whole file."""
+    path = os.path.join(WORKSPACE, filename)
+    if not os.path.exists(path): return f"Error: '{filename}' does not exist."
+    with open(path, "r") as f: content = f.read()
+    if old_text not in content: return f"Error: section not found in '{filename}'."
+    with open(path, "w") as f: f.write(content.replace(old_text, new_text, 1))
+    return f"Section updated in '{filename}'."
+
+@tool
+def browse_url(url: str) -> str:
+    """Fetch and return the readable text content of any webpage URL."""
+    try:
+        response = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
+        soup = BeautifulSoup(response.text, "html.parser")
+        for tag in soup(["script", "style", "nav", "footer"]): tag.decompose()
+        text = soup.get_text(separator="\n", strip=True)
+        return text[:3000]
+    except Exception as e:
+        return f"Error browsing URL: {e}"
+    
+@tool_decorator
+def search_stackoverflow(query: str) -> str:
+    """Search Stack Overflow for coding questions and answers."""
+    import requests
+    url = "https://api.stackexchange.com/2.3/search/advanced"
+    params = {"order": "desc", "sort": "relevance", "q": query, "site": "stackoverflow", "pagesize": 3}
+    r = requests.get(url, params=params, timeout=10).json()
+    results = []
+    for item in r.get("items", []):
+        results.append(f"Q: {item['title']}\nLink: {item['link']}\nAnswered: {item['is_answered']}")
+    return "\n\n".join(results) if results else "No results found."
+
+_repl = PythonREPL()
+
+@tool_decorator
+def python_repl(code: str) -> str:
+    """Execute Python code and return the output. Use for calculations, data processing, and scripting."""
+    return _repl.run(code)
+
+
+shell     = ShellTool()
+list_dir  = ListDirectoryTool()
+file_search = FileSearchTool()
+web_search = DuckDuckGoSearchRun()
+wikipedia  = WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper())
+
+tools = [
+    create_file, read_file, edit_file, edit_section,
+    append_to_file, delete_file,
+    shell, list_dir, file_search, python_repl,
+    web_search, wikipedia, browse_url, search_stackoverflow
+]
+
+system_prompt = ""
+turn_count = 0
+config = {"threshold": 7}
+
+def triage_node(state: AgentState) -> AgentState:
+    message = state["messages"][-1].content
+    score = score_confidence(message)
+    return {**state, "confidence": score}
+
+def route_after_triage(state: AgentState) -> str:
+    if state["confidence"] >= config["threshold"]:
+        return "local"
+    return "claude"
+
+llm_with_tools = llm.bind_tools(tools)
+tool_node = ToolNode(tools)
+
+def local_node(state: AgentState) -> AgentState:
+    past  = retrieve_episodic(state["messages"][-1].content)
+    facts = retrieve_semantic(state["messages"][-1].content)
+    context_parts = []
+    if past:  context_parts.append(f"Past conversations:\n{past}")
+    if facts: context_parts.append(f"Known facts:\n{facts}")
+    context = "\n\n".join(context_parts)
+    sys_parts = []
+    if system_prompt: sys_parts.append(system_prompt)
+    if context:       sys_parts.append(context)
+    combined_system = "\n\n".join(sys_parts)
+    messages = ([SystemMessage(content=combined_system)] if combined_system else []) + list(state["messages"])
+    tool_steps = []
+    while True:
+        response = llm_with_tools.invoke(messages)
+        messages.append(response)
+        if not response.tool_calls:
+            break
+        tool_results = tool_node.invoke({"messages": messages})
+        messages = tool_results["messages"]
+        for tc in response.tool_calls:
+            tool_steps.append({"tool": tc["name"], "input": str(tc["args"])})
+    return {**state, "messages": [AIMessage(content=response.content)], "handled_by": "local llm", "tool_steps": tool_steps, "memory_used": bool(past)}
+
+def claude_node(state: AgentState) -> AgentState:
+    history = ""
+    for msg in state["messages"][:-1]:
+        if isinstance(msg, HumanMessage): history += f"User: {msg.content}\n"
+        elif isinstance(msg, AIMessage): history += f"Assistant: {msg.content}\n"
+    last = state["messages"][-1].content
+    full_prompt = f"{history}User: {last}\nAssistant:"
+    result = subprocess.run(["claude", "-p", full_prompt, "--dangerously-skip-permissions"], capture_output=True, text=True)
+    response = result.stdout.strip()
+    return {**state, "messages": [AIMessage(content=response)], "handled_by": "claude", "tool_steps": [], "memory_used": False}
+
+def memory_save_node(state: AgentState) -> AgentState:
+    global turn_count
+    messages = state["messages"]
+    user_msg = next((m for m in reversed(messages) if isinstance(m, HumanMessage)), None)
+    ai_msg   = next((m for m in reversed(messages) if isinstance(m, AIMessage)), None)
+    if user_msg: save_episodic("user", user_msg.content)
+    if ai_msg:   save_episodic("assistant", ai_msg.content)
+    turn_count += 1
+    return {**state, "turn_count": turn_count}
+
+SUMMARIZE_EVERY = 10
+
+def summarizer_node(state: AgentState) -> AgentState:
+    if episodic.count() == 0: return state
+    raw = episodic.query(query_texts=["conversation summary"], n_results=10)["documents"][0]
+    combined = "\n".join(raw)
+    prompt = f"""Extract 3-5 concise facts about the user or their work from these conversations. Reply with one fact per line. If nothing useful, reply NONE.{combined}"""
+    response = llm.invoke([HumanMessage(content=prompt)])
+    lines = [l.strip() for l in response.content.strip().split("\n") if l.strip() and l.strip() != "NONE"]
+    for fact in lines:
+        semantic.add(documents=[fact], ids=[str(uuid.uuid4())])
+    return {**state, "facts_learned": len(lines)}
+
+def route_after_memory(state: AgentState) -> str:
+    if state["turn_count"] % SUMMARIZE_EVERY == 0:
+        return "summarize"
+    return "end"
+
+graph_builder = StateGraph(AgentState)
+
+graph_builder.add_node("triage",    triage_node)
+graph_builder.add_node("local",     local_node)
+graph_builder.add_node("claude",    claude_node)
+graph_builder.add_node("save",      memory_save_node)
+graph_builder.add_node("summarize", summarizer_node)
+
+graph_builder.set_entry_point("triage")
+
+graph_builder.add_conditional_edges("triage", route_after_triage, {"local": "local", "claude": "claude"})
+graph_builder.add_edge("local",  "save")
+graph_builder.add_edge("claude", "save")
+graph_builder.add_conditional_edges("save", route_after_memory, {"summarize": "summarize", "end": END})
+graph_builder.add_edge("summarize", END)
+
+graph = graph_builder.compile()
+
 conversation_history = []
 
-def chat(message: str, force_model: str = None) -> dict:
-    if force_model == 'local':
-        score = 10
-    elif force_model == 'claude':
-        score = 0
-    else:
-        score = score_confidence(message)
+def chat(message: str, force_model: str = None, system_prompt_override: str = None) -> dict:
+    global turn_count
+    if force_model == "local":   override_score = 10
+    elif force_model == "claude": override_score = 0
+    else:                         override_score = None
 
-    past = retrieve_memories(message)
-    facts = retrieve_facts(message)
     conversation_history.append(HumanMessage(content=message))
+    global system_prompt
+    if system_prompt_override:
+        system_prompt = system_prompt_override
 
-    if score >= CONFIDENCE_THRESHOLD:
-        context_parts = []
-        if past:
-            context_parts.append(f"Past conversations:\n{past}")
-        if facts:
-            context_parts.append(f"Known facts about user:\n{facts}")
-        context_str = "\n\n".join(context_parts)
-        invoke_msgs = ([SystemMessage(content=context_str)] if context_str else []) + conversation_history
-        result = agent.invoke({"messages": invoke_msgs})
-        conversation_history.clear()
-        conversation_history.extend(result["messages"])
-        response = result["messages"][-1].content
-        handled_by = "local llm"
-        tool_steps = []
-        for msg in result["messages"]:      # ← indented INSIDE the if
-            if hasattr(msg, "tool_calls") and msg.tool_calls:
-                for tc in msg.tool_calls:
-                    tool_steps.append({"tool": tc["name"], "input": str(tc["args"])})
-    else:
-        response = chat_claude(message, conversation_history)
-        conversation_history.append(AIMessage(content=response))
-        tool_steps = []
-        handled_by = "claude"
-
-    save_memory("user", message)
-    save_memory("assistant", response)
-    facts_found = extract_facts(message, response)
-    for fact in facts_found:
-        save_fact(fact)
-
-    return {
-        "response": response,
-        "tool_steps": tool_steps,
-        "confidence": score,
-        "handled_by": handled_by,
-        "memory_used": bool(past),
-        "facts_learned": len(facts_found)
+    initial_state: AgentState = {
+        "messages":     conversation_history,
+        "confidence":   override_score if override_score is not None else 5,
+        "handled_by":   "",
+        "tool_steps":   [],
+        "memory_used":  False,
+        "facts_learned": 0,
+        "turn_count":   turn_count,
     }
 
-def chat_claude(message: str, history: list) -> str:
-    context = ""
-    for msg in history[:-1]:
-        if msg.__class__.__name__ == "HumanMessage":
-            context += f"User: {msg.content}\n"
-        elif msg.__class__.__name__ == "AIMessage":
-            context += f"Assistant: {msg.content}\n"
+    if override_score is not None:
+        initial_state["confidence"] = override_score
 
-    full_prompt = f"{context}User: {message}\nAssistant:"
+    result = graph.invoke(initial_state)
+    response = result["messages"][-1].content
+    conversation_history.append(AIMessage(content=response))
 
-    result = subprocess.run(
-        ["claude", "-p", full_prompt],
-        capture_output=True,
-        text=True
-    )
-    return result.stdout.strip()
+    return {
+        "response":     response,
+        "tool_steps":   result["tool_steps"],
+        "confidence":   result["confidence"],
+        "handled_by":   result["handled_by"],
+        "memory_used":  result["memory_used"],
+        "facts_learned": result["facts_learned"],
+    }
 
-def clear_history() -> None:
+def clear_history():
     conversation_history.clear()
 
-if __name__ == "__main__":
-    # print("---------------------------------------------------------------")
-    # print(chat("Create a file called test.txt with a fun fact about the moon")) # test for scoring prompt
-    # print("---------------------------------------------------------------")
-    # print(chat("Create a file called notes.txt with a haiku about coding")) # test for file operations agent
-    # print("---------------------------------------------------------------")
-    # print(chat("What will the stock market do tomorrow?")) # test for scoring prompt
-    # print("---------------------------------------------------------------")
-    # print(chat_claude("what is quantum entanglement?", [])) # test for claude chat
-    print("---------------------------------------------------------------")
-    print(chat("what is capital of France?")) # test for triaging agent
-    print("---------------------------------------------------------------")
-    print(chat("Predict the exact outcome of next USA elections?")) # test for triaging agent

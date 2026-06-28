@@ -119,10 +119,11 @@ export function MessageBubble({ message, showCost, onEdit, onBookmark, onOpenArt
           </div>
         )}
 
-        {!loading && !isUser && (confidence !== undefined || handled_by || memory_used || showCost) && (
+        {!loading && !isUser && (confidence !== undefined || handled_by || memory_used || showCost || (tool_steps && tool_steps.length > 0)) && (
           <div className="msg-meta-row">
             {confidence !== undefined && <ConfidenceBadge score={confidence} />}
             {handled_by && <HandledByBadge by={handled_by} confidence={confidence} />}
+            {tool_steps && tool_steps.length > 0 && <ToolsBadge steps={tool_steps} />}
             {memory_used && <span className="memory-badge"><BookOpen size={10}/> from memory</span>}
             {facts_learned !== undefined && facts_learned > 0 && (
               <span className="facts-badge"><Sparkles size={10}/> {facts_learned} fact{facts_learned > 1 ? 's' : ''} learned</span>
@@ -195,6 +196,19 @@ function HandledByBadge({ by, confidence }: { by: string; confidence?: number })
 function ConfidenceBadge({ score }: { score: number }) {
   const color = score >= 8 ? 'confidence--high' : score >= 5 ? 'confidence--mid' : 'confidence--low';
   return <div className={`confidence-badge ${color}`}>Confidence {score}/10</div>;
+}
+
+function ToolsBadge({ steps }: { steps: ToolStep[] }) {
+  const names = [...new Set(steps.map(s => s.tool))];
+  return (
+    <span className="tools-badge">
+      <Wrench size={10}/>
+      {names.length} tool{names.length > 1 ? 's' : ''}
+      <span className="tools-tooltip">
+        {names.map((n, i) => <span key={i} className="tools-tooltip-item">{n}</span>)}
+      </span>
+    </span>
+  );
 }
 
 function TypingDots() {

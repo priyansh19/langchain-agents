@@ -87,8 +87,8 @@ mach-1/
 ├── p4-Confidence-Scoring-Agent/     ✅  Phase 4: Confidence scoring (1–10)
 ├── p5-Triage-Routing-Agent/         ✅  Phase 5: Local vs Claude routing
 ├── p6-Episodic-Memory-Agent/        ✅  Phase 6: ChromaDB episodic memory
-├── p7-Semantic-Memory-Agent/        🔧  Phase 7: Fact extraction + semantic store
-├── p8-Summarizer-Agent/             ⬜  Phase 8: Auto-consolidate every N chats
+├── p7-Semantic-Memory-Agent/        ✅  Phase 7: Fact extraction + semantic store
+├── p8-LangGraph-Tools-Agent/        🔧  Phase 8: Custom LangGraph graph + web search + MCP tools + summarizer
 ├── p9-Three-Mode-Shell/             ⬜  Phase 9: Chat / Cowork / Code shell
 ├── p10-Cowork-Mode/                 ⬜  Phase 10: Task cards + approval gates
 ├── p11-Code-Mode/                   ⬜  Phase 11: Diff, terminal, file editor

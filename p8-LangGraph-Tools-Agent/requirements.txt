@@ -3,8 +3,13 @@ langchain-ollama
 langchain-community
 langchain-anthropic
 langchain-mcp-adapters
+langchain-experimental
 langgraph
 fastapi
 uvicorn
+ddgs
+wikipedia
 chromadb
 duckduckgo-search
+beautifulsoup4
+requests

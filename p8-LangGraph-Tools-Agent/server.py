@@ -30,10 +30,12 @@ def capabilities():
 
 class ChatRequest(BaseModel):
     message: str
+    force_model: str = None
+    system_prompt: str = None
 
 @app.post("/chat")
 def chat(req: ChatRequest):
-    result = agent.chat(req.message)
+    result = agent.chat(req.message, force_model=req.force_model, system_prompt_override=req.system_prompt)
     return {
         "response": result["response"],
         "tool_steps": result.get("tool_steps", []),
@@ -42,9 +44,6 @@ def chat(req: ChatRequest):
         "memory_used": result.get("memory_used", False),
         "facts_learned": result.get("facts_learned", 0)
     }
-
-class PersonaRequest(BaseModel):
-    persona: str
 
 @app.post("/clear")
 def clear():
@@ -56,14 +55,10 @@ class ConfigRequest(BaseModel):
 
 @app.get("/config")
 def get_config():
-    return {"threshold": agent.CONFIDENCE_THRESHOLD}
+    return {"threshold": agent.config["threshold"]}
 
 @app.patch("/config")
 def update_config(req: ConfigRequest):
-    agent.CONFIDENCE_THRESHOLD = max(1, min(10, req.threshold))
-    return {"threshold": agent.CONFIDENCE_THRESHOLD}
+    agent.config["threshold"] = max(1, min(10, req.threshold))
+    return {"threshold": agent.config["threshold"]}
 
-@app.post("/persona")
-def set_persona(req: PersonaRequest):
-    agent.set_persona(req.persona)
-    return {"status": "persona updated"}

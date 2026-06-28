@@ -155,7 +155,7 @@ function App() {
     setSessions(prev => prev.map(s => s.id === id ? { ...s, messages: updater(s.messages) } : s));
   }, []);
 
-  const handleSend = useCallback(async (text: string) => {
+  const handleSend = useCallback(async (text: string, systemPrompt?: string) => {
     const loadId    = uid();
     const targetId  = activeId;
     const ctrl      = new AbortController();
@@ -182,7 +182,7 @@ function App() {
     undoTimRef.current = setTimeout(() => setShowUndo(false), 3000);
 
     try {
-      const data = await sendChat(text, ctrl.signal);
+      const data = await sendChat(text, ctrl.signal, systemPrompt);
       clearTimeout(undoTimRef.current ?? undefined);
       setShowUndo(false);
       updateSession(targetId, msgs => msgs.map(m =>
